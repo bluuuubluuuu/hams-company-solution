@@ -92,3 +92,6 @@ Count screen reference: `docs/image_guideline/app/app-01-count-screen.jpeg`.
 
 A release candidate passes when **all TC-AUTO**, **all TC-BE**, and **TC-APP-01…16** pass, and
 TC-APP-15 confirms real cuts with satellites > 0 landing on the correct Wialon unit.
+
+---
+**Nav:** [🏠 Hub](README.md) · [Overview](COMPANY_HANDOFF.md) · [Setup](SETUP.md) · [Backend](provisioning/BUILD_ADMIN_BACKEND.md) · [Config](CONFIG_REFERENCE.md)

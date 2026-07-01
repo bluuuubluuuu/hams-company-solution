@@ -266,3 +266,6 @@ Push progress and completion surface as notifications ("Recording FFB counts" wh
 | Lint | `.\gradlew.bat :app:lintDebug` |
 | Clean | `.\gradlew.bat clean` |
 | GPS logs | `adb logcat -s HAMS_GPS` |
+
+---
+**Nav:** [🏠 Hub](README.md) · [Overview](COMPANY_HANDOFF.md) · [Backend](provisioning/BUILD_ADMIN_BACKEND.md) · [Config](CONFIG_REFERENCE.md) · [Tests](TEST_CASES.md)

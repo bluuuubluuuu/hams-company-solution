@@ -17,3 +17,6 @@ New here? Start at the hub: [README.md](README.md).
 
 **Rig note:** Docker containers stop when the PC sleeps → `docker start hams-pg hams-n8n`, then
 confirm `curl http://localhost:5678/healthz` returns `200`.
+
+---
+**Nav:** [🏠 Hub](README.md) · [Setup](SETUP.md) · [Backend](provisioning/BUILD_ADMIN_BACKEND.md) · [Config](CONFIG_REFERENCE.md) · [Tests](TEST_CASES.md)

@@ -49,3 +49,6 @@ Cut data path is unchanged: phone → Wialon IPS directly. The backend only does
 - **Wialon + IPS protocol:** [CONTEXT.md](CONTEXT.md)
 - **Requirements / event codes:** [docs/HAMS_APP_REQUIREMENTS.md](docs/HAMS_APP_REQUIREMENTS.md),
   [docs/HAMS_EVENT_CODE_DICTIONARY.md](docs/HAMS_EVENT_CODE_DICTIONARY.md)
+
+---
+**Nav:** [🏠 Hub](README.md) · [Setup](SETUP.md) · [Backend](provisioning/BUILD_ADMIN_BACKEND.md) · [Config](CONFIG_REFERENCE.md) · [Tests](TEST_CASES.md)

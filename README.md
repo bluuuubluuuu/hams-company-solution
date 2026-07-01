@@ -87,18 +87,47 @@ Wialon account lives on a different Wialon server.
 
 ---
 
-## 🛠️ Build order (with prerequisites)
+## 🛠️ Follow this path — build then test
 
-Do these in order. Each step names its prerequisites — **finish a step fully before the next.**
+Work through the phases **in order, opening the exact file/section listed**. Each phase names what
+must already be done before you start it — **finish a phase fully before moving on.** Check the box
+when a phase's own success check passes.
 
-| # | Step | Prerequisite before you start | Guide |
-|---|---|---|---|
-| 1 | Get the code & fill `local.properties` | JDK 17, Android SDK, your Wialon token | [SETUP §1–2](SETUP.md) |
-| 2 | Build & install the app | Step 1 done; a device/emulator on `adb` | [SETUP §3](SETUP.md) |
-| 3 | Stand up the backend (n8n + Postgres) | Docker Desktop, a Postgres DB, `psql` | [BUILD_ADMIN_BACKEND](provisioning/BUILD_ADMIN_BACKEND.md) |
-| 4 | Prepare the Wialon unit | A Wialon unit exists; you can edit it | [SETUP §5](SETUP.md) + [unit checklist](docs/HAMS_UNIT_PROVISIONING_CHECKLIST.md) |
-| 5 | Pair the phone | Steps 2–4 done; an OTP minted | [SETUP §6](SETUP.md) |
-| 6 | Run tests & verify a real push | Step 5 done; outdoors for GPS lock | [SETUP §7–8](SETUP.md) |
+### Build
 
-New here? Read [COMPANY_HANDOFF.md](COMPANY_HANDOFF.md) for the overview, then start at
-[SETUP.md](SETUP.md).
+- [ ] **Phase 0 · Understand** — read the overview so the pieces make sense.
+  - Prereq: none · Open: **[COMPANY_HANDOFF.md](COMPANY_HANDOFF.md)**
+  - Done when: you understand app ↔ n8n ↔ Wialon and the pairing flow.
+- [ ] **Phase 1 · Configure** — clone and fill `local.properties` (no source edits).
+  - Prereq: JDK 17, Android SDK, your 🔴 `WIALON_TOKEN` · Open: **[SETUP.md §1](SETUP.md)**
+  - Done when: `local.properties` exists with your values.
+- [ ] **Phase 2 · Build & install the app**.
+  - Prereq: Phase 1; a device/emulator on `adb devices` · Open: **[SETUP.md §2](SETUP.md)**
+  - Done when: the app launches and shows the PairingScreen.
+- [ ] **Phase 3 · Stand up the backend** (n8n + Postgres).
+  - Prereq: Docker Desktop, a 🔴 Postgres DB, `psql` · Open: **[provisioning/BUILD_ADMIN_BACKEND.md](provisioning/BUILD_ADMIN_BACKEND.md)**
+  - Done when: its §9 `curl` happy-path claim returns `200`.
+- [ ] **Phase 4 · Connect the app to n8n**.
+  - Prereq: Phase 3 · Open: **[SETUP.md §4](SETUP.md)**
+  - Done when: the phone can reach `…/webhook/manual-claim` (401 without a key).
+- [ ] **Phase 5 · Prepare the Wialon unit**.
+  - Prereq: a 🔴 Wialon unit you can edit · Open: **[SETUP.md §5](SETUP.md)** + **[unit checklist](docs/HAMS_UNIT_PROVISIONING_CHECKLIST.md)**
+  - Done when: the unit's Unique ID = your unit id, Advanced filters applied.
+- [ ] **Phase 6 · Pair the phone**.
+  - Prereq: Phases 2–5; an OTP minted · Open: **[SETUP.md §6](SETUP.md)**
+  - Done when: `hams_prefs.xml` shows `device_unique_id=<unit>`.
+
+### Test
+
+- [ ] **Phase 7 · Automated tests**.
+  - Prereq: Phase 2 · Open: **[SETUP.md §7](SETUP.md)** → run, then tick **[TEST_CASES.md](TEST_CASES.md) §A**.
+  - Done when: unit + instrumented tests are `BUILD SUCCESSFUL`.
+- [ ] **Phase 8 · Backend contract tests**.
+  - Prereq: Phase 3 · Open: **[TEST_CASES.md §B](TEST_CASES.md)** (curl cases TC-BE-01…09).
+  - Done when: every webhook case returns its expected status.
+- [ ] **Phase 9 · App acceptance + real push**.
+  - Prereq: Phase 6; outdoors for GPS lock · Open: **[SETUP.md §8](SETUP.md)** + **[TEST_CASES.md §C–E](TEST_CASES.md)**.
+  - Done when: a real cut with satellites > 0 lands on the correct Wialon unit.
+
+When all 10 boxes are ticked the system is fully built and verified. Need a value or contract mid-way?
+→ **[CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)**.

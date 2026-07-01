@@ -32,3 +32,6 @@ The `seed` workflow is **read-only against Wialon** — it pulls each unit's `un
 Postgres and UPSERTs (never touches `claimed`/`device_fingerprint`, so re-runs are safe). It does
 **not** configure Wialon units; per-unit Wialon setup is the
 [../docs/HAMS_UNIT_PROVISIONING_CHECKLIST.md](../docs/HAMS_UNIT_PROVISIONING_CHECKLIST.md).
+
+---
+**Nav:** [🏠 Hub](../README.md) · [Setup](../SETUP.md) · [Build backend](BUILD_ADMIN_BACKEND.md) · [Config](../CONFIG_REFERENCE.md) · [Tests](../TEST_CASES.md)

@@ -94,3 +94,6 @@ psql $env:PROV_DB_URL -c "SELECT unique_id, device_fingerprint, claimed FROM uni
 - n8n Postgres password, `x-hams-key`, Wialon token → inside n8n (credential + node fields)
 - The `provisioning/n8n/workflows/*.json` have these replaced by placeholders
   (`<HAMS_CLAIM_SECRET>`, `<WIALON_TOKEN>`) — re-enter after importing.
+
+---
+**Nav:** [🏠 Hub](README.md) · [Overview](COMPANY_HANDOFF.md) · [Setup](SETUP.md) · [Backend](provisioning/BUILD_ADMIN_BACKEND.md) · [Tests](TEST_CASES.md)

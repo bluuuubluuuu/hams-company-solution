@@ -191,3 +191,6 @@ Confirm: `psql "$PROV_DB_URL" -c "SELECT unique_id, device_fingerprint, claimed 
 - The workflow JSONs in `provisioning/n8n/workflows/` have secrets replaced by placeholders
   (`<HAMS_CLAIM_SECRET>`, `<WIALON_TOKEN>`) — re-enter the real values after importing; never commit them.
 - Real secrets live only in `local.properties` and inside the n8n credential/node fields.
+
+---
+**Nav:** [🏠 Hub](../README.md) · [Setup](../SETUP.md) · [provisioning/](README.md) · [Config](../CONFIG_REFERENCE.md) · [Tests](../TEST_CASES.md)
