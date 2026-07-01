@@ -85,6 +85,13 @@ Wialon account lives on a different Wialon server.
 > account's unit, not anyone else's, as long as your unit ids are your own. The IPS login carries
 > **no device password** (`;NA`), so keep your unit ids private. See [CONTEXT.md](CONTEXT.md).
 
+> ## ⚠️ Know this before you rely on it: the dev tunnel is temporary
+> If you expose n8n with a `cloudflared` **quick tunnel**, its hostname is **random and dies on every
+> restart/sleep** — which silently breaks pairing on every installed phone (*"no connection"*). You
+> then have to renew the tunnel, update `local.properties`, and rebuild. Full alert + the renew steps
+> + how to switch to a **permanent** URL (ngrok static / named Cloudflare tunnel / cloud host) are in
+> **[SETUP.md §4](SETUP.md)**. For any real deployment, use a fixed URL so you never rebuild for this.
+
 ---
 
 ## 🛠️ Follow this path — build then test

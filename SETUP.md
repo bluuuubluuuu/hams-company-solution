@@ -115,12 +115,47 @@ expose in §5 (`http://localhost:5678`, an `adb reverse` loopback, or a tunnel U
   MANUAL_CLAIM_URL=https://<random>.trycloudflare.com/webhook/manual-claim
   RELEASE_URL=https://<random>.trycloudflare.com/webhook/release
   ```
-  > ⚠️ The quick-tunnel hostname is **ephemeral** — it changes every restart. Whenever it changes you
-  > must update `local.properties` **and rebuild/reinstall** (`.\gradlew.bat :app:installDebug`),
-  > because these URLs are compiled into the app.
-
 Make sure `HAMS_CLAIM_SECRET` in `local.properties` equals the value on the n8n IF node, then
 reinstall: `.\gradlew.bat :app:installDebug`.
+
+> ## ⚠️ ALERT — the quick tunnel is temporary; you WILL have to renew it
+>
+> A `cloudflared tunnel --url …` **quick tunnel** gets a **random hostname** and **dies whenever it
+> stops** — PC sleep, reboot, or closing the terminal. When it dies, **every phone already built
+> with that URL loses connection** (pairing shows *"no connection"*). This is the single most common
+> "it stopped working" cause. The OTP form is unaffected — it's on `localhost` (see §6).
+>
+> ### How to tell the tunnel is dead
+> ```
+> curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 -X POST <your tunnel URL>/webhook/manual-claim -H "Content-Type: application/json" -d "{}"
+> ```
+> `401` = alive · `000`/timeout = **dead → renew it** with the steps below.
+>
+> ### Renew the tunnel (do this every time it changes) — manual, ~3 min
+> 1. Start a fresh tunnel and copy the **new** `https://<random>.trycloudflare.com` it prints:
+>    ```
+>    cloudflared tunnel --url http://localhost:5678
+>    ```
+> 2. Update **both** URLs in `local.properties` to the new hostname:
+>    ```
+>    MANUAL_CLAIM_URL=https://<new-random>.trycloudflare.com/webhook/manual-claim
+>    RELEASE_URL=https://<new-random>.trycloudflare.com/webhook/release
+>    ```
+> 3. **Rebuild + reinstall on every device** (the URL is compiled into the APK):
+>    ```
+>    .\gradlew.bat :app:installDebug
+>    ```
+> 4. Re-pair if needed. Nothing changes in n8n — it doesn't know about the tunnel.
+>
+> ### Stop the pain — use a *stable* URL for real deployment
+> The renew dance is only acceptable for bench testing. For any real rollout, replace the quick
+> tunnel with a **fixed hostname** so you bake the URL once and never rebuild for this reason:
+> - **ngrok static domain** (free, no domain needed): `ngrok http --domain=<your-fixed>.ngrok-free.app 5678`
+> - **Named Cloudflare Tunnel** (needs a domain on Cloudflare): `cloudflared tunnel login` → `create` →
+>   route DNS → `cloudflared service install` (auto-starts on boot).
+> - **Host n8n on a cloud VM / n8n Cloud** — a real always-on domain, no tunnel at all.
+>
+> Run whichever you choose (and Docker/n8n) as an **auto-start service** so a reboot doesn't kill it.
 
 ---
 
@@ -250,7 +285,7 @@ Push progress and completion surface as notifications ("Recording FFB counts" wh
 | Pairing fails `admin_auth_failed` (401) | wrong/expired OTP, or `HAMS_CLAIM_SECRET` mismatch | mint a fresh OTP; make app value == n8n IF-node value |
 | Pairing fails `unauthorized` (401) | missing/wrong `x-hams-key` | check `HAMS_CLAIM_SECRET`; confirm the webhook is published |
 | Pairing fails `already_bound`/`fingerprint_in_use` (409) | unit or phone already claimed | release the unit or use another unit id |
-| Phone can't reach n8n | tunnel down/stale URL, or plain HTTP over non-loopback | restart the tunnel, update `local.properties`, **rebuild**; or use `adb reverse` + `127.0.0.1` |
+| Phone can't reach n8n / pairing "no connection" | **quick tunnel died** (most common — random hostname changes on restart/sleep), or plain HTTP over non-loopback | **renew the tunnel** — see the ⚠️ ALERT in §4 (new tunnel → update `local.properties` → rebuild); or use `adb reverse` + `127.0.0.1` |
 | Cuts land in Wialon as `(0)` satellites, loose coords | captured indoors on a network fix before GNSS lock | test outdoors; wait for `sats>=12, hdop<=3` before pressing |
 | No message in Wialon at all | unit's Unique ID ≠ paired `unique_id` (`#AL#0`), or Advanced filters not set | fix the unit's Unique ID / apply the unit checklist (§5) |
 | Auto-push never fires | on metered mobile data | connect to unmetered Wi-Fi, or use manual push |
