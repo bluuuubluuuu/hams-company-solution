@@ -132,6 +132,12 @@ reinstall: `.\gradlew.bat :app:installDebug`.
 > `401` = alive · `000`/timeout = **dead → renew it** with the steps below.
 >
 > ### Renew the tunnel (do this every time it changes) — manual, ~3 min
+> 0. **Make sure the backend is up first** — the tunnel only forwards to `localhost:5678`, so n8n
+>    must be running or the new URL leads to nothing (and OTPs won't generate either):
+>    ```
+>    docker start hams-n8n          # and: docker start hams-pg   (if Postgres is a local container)
+>    curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5678/healthz   # want 200
+>    ```
 > 1. Start a fresh tunnel and copy the **new** `https://<random>.trycloudflare.com` it prints:
 >    ```
 >    cloudflared tunnel --url http://localhost:5678
