@@ -49,6 +49,9 @@ Two gotchas that cost us time:
 Click **Test** → must be green before continuing.
 
 ## 4. Workflow `generate-otp` (admin issues a supervisor code)
+
+![generate-otp workflow](../docs/image_guideline/n8n/n8n-workflow-generate-otp.png)
+
 ```
 Form Trigger  (title "Generate Supervisor OTP"; optional Number field "minutes")
   → Postgres (Execute Query, cred "Postgres account"):
@@ -59,6 +62,9 @@ Form Trigger  (title "Generate Supervisor OTP"; optional Number field "minutes")
 Open the form's Test URL → submit → the completion page shows a 6-digit code. Done.
 
 ## 5. Workflow `manual-claim` (device binds a unit)  — POST webhook
+
+![manual-claim workflow](../docs/image_guideline/n8n/n8n-workflow-manual-claim.png)
+
 ```
 Webhook  (HTTP Method POST, Path "manual-claim", Authentication None,
           Respond = "Using 'Respond to Webhook' Node")
@@ -86,6 +92,9 @@ return [{ json: { code, body } }];
 ```
 
 ## 6. Workflow `release` (device releases its unit) — POST webhook
+
+![release workflow](../docs/image_guideline/n8n/n8n-workflow-release.png)
+
 Identical shape to `manual-claim`, three changes:
 - Webhook Path = `release`
 - Postgres query: `SELECT release_unit($1,$2,$3) AS result;` (same 3 params)
@@ -107,6 +116,9 @@ Webhooks are **not live until Published**. Open `manual-claim` and `release` →
   Postgres credential on each node, then Publish.
 
 ## 8. Workflow `seed` (pull Wialon units → Postgres) — Manual trigger
+
+![seed workflow](../docs/image_guideline/n8n/n8n-workflow-seed.png)
+
 Host: `https://hst-api.wialon.eu/wialon/ajax.html`
 ```
 Manual Trigger

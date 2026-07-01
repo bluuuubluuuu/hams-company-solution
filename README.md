@@ -15,6 +15,11 @@ Wialon unit id via an office admin + a one-time password (OTP). It never touches
 [Phone: HAMS app] --cut data (IPS #D#)-----------------------> [Wialon cloud]
 ```
 
+<img src="docs/image_guideline/app/app-01-count-screen.jpeg" width="260" alt="HAMS count screen">
+
+> Screenshots referenced throughout the docs live in [`docs/image_guideline/`](docs/image_guideline)
+> (`app/` = phone UI, `n8n/` = backend workflows).
+
 ---
 
 ## 📖 Documentation menu
@@ -27,6 +32,7 @@ Read top-to-bottom the first time; after that, jump to what you need.
 | **[SETUP.md](SETUP.md)** | End-to-end build walkthrough: from a fresh clone to a paired phone pushing real cuts. Prerequisite-gated, step by step. | You are setting the whole thing up. **Main guide.** |
 | **[provisioning/BUILD_ADMIN_BACKEND.md](provisioning/BUILD_ADMIN_BACKEND.md)** | How to build the n8n + Postgres admin backend — fast (import ready workflows) or from scratch (node-by-node), plus a gotchas list and curl test matrix. | You are standing up the backend (called from SETUP §5). |
 | **[provisioning/README.md](provisioning/README.md)** | Index of the `provisioning/` folder (SQL, workflow JSONs) and what each file is. | You want to know what's in the backend folder. |
+| **[TEST_CASES.md](TEST_CASES.md)** | Verification checklist — automated tests + backend + app acceptance cases with expected results. | You want to confirm a build works end to end. |
 | **[LOCAL-RUN.md](LOCAL-RUN.md)** | 60-second "run it all on one PC" checklist that links to the full guides. | You just want the quick localhost bring-up order. |
 
 ### Reference (look up, don't read cover-to-cover)

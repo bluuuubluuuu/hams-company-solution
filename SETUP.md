@@ -175,6 +175,16 @@ adb shell run-as com.klk.hams.debug cat shared_prefs/hams_prefs.xml
 # expect: <string name="device_unique_id">HAMS_TEST_001</string>
 ```
 
+After a successful pair the app shows the **count screen**:
+
+![Count screen](docs/image_guideline/app/app-01-count-screen.jpeg)
+
+**Re-bind / release (office-only)** is on the admin sheet — tap the battery pill. Reset is gated by
+a supervisor OTP:
+
+![Admin device-pairing sheet](docs/image_guideline/app/app-03-admin-sheet.jpeg)
+![Supervisor approval (OTP)](docs/image_guideline/app/app-04-supervisor-code.jpeg)
+
 ---
 
 ## 7. Run the tests
@@ -219,6 +229,16 @@ adb exec-out run-as com.klk.hams.debug cat databases/hams.db-shm  > hams.db-shm
 sqlite3 hams.db "SELECT id, event_code, satellites, speed, hdop, pushed FROM events ORDER BY id DESC LIMIT 15;"
 # pushed: 0 = pending, 1 = uploaded, 2 = rejected
 ```
+
+A **3-second hold on NEW TASK** finalizes the current task (queued for push) and starts a fresh one;
+the upload badge shows how many tasks are pending:
+
+![New task, one push pending](docs/image_guideline/app/app-02-new-task.jpeg)
+
+Push progress and completion surface as notifications ("Recording FFB counts" while a task is active,
+"N tasks uploaded ✓" on success):
+
+![HAMS notifications](docs/image_guideline/app/app-05-notifications.jpeg)
 
 ---
 
