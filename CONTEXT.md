@@ -74,7 +74,7 @@ curl "https://hst-api.wialon.eu/wialon/ajax.html" \
 | Endpoint | Purpose | Notes |
 |---|---|---|
 | `token/login` | Get session ID (`eid`) | Always re-run before batch |
-| `core/search_items` | Find units, groups, resources | Use `propName=sys_name` |
+| `core/search_items` | Find units, groups, resources | Use `propName=sys_name`; provisioning seeding uses `flags=257` (0x1\|0x100) to read `items[].uid` = IPS unique id |
 | `core/create_unit` | Create unit | Admin only, one-time |
 | `core/get_hw_types` | List hardware types available on license | `filterType:"name"`, `filterValue:["Wialon IPS"]` |
 | `unit/update_device_type` | Set hardware type + unique ID | `hwTypeId=600002235` (numeric) |
@@ -224,6 +224,9 @@ Expected response: `#AD#1\r\n` (success). Error codes in §3.4.
 | 5 | longitude | DDDMM.MMMM | e.g. `10316.9791` | See §3.5 coordinate conversion |
 | 6 | lon_dir | `E` | `E` | Always E for Malaysia |
 | 7 | speed | int km/h | `0` | Always 0 — workers are on foot |
+<!-- DRAFT 2026-06-29 (WYH), pending SV: Speed (field 7) now carries real GPS
+ground speed (Location.getSpeed() → km/h int); 0 only when the fix has no speed.
+Was hardcoded 0 before Req 2. See docs/superpowers/specs/2026-06-29-vendor-requirements-design.md §2. -->
 | 8 | course | int degrees | `0` | **V6: real value, not the V5 hack.** 0 = no heading |
 | 9 | altitude | int metres | `10` | Estate terrain estimate |
 | 10 | satellites | int | from `LocationProvider` | Number of GPS satellites at fix |

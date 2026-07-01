@@ -5,6 +5,12 @@
 
 # HAMS — Direction 2: Automated Device → Wialon-Unit Provisioning (Findings)
 
+> ⚠️ **Superseded — historical record.** This documents the earlier **auto-claim** design
+> (phone self-claims a free unit, no typing). The shipped system uses **office manual pairing**
+> (admin keys the unit id + a supervisor OTP on the PairingScreen). For current behaviour see
+> [../COMPANY_HANDOFF.md](../COMPANY_HANDOFF.md) and [../README.md](../README.md). Kept for design
+> rationale only.
+
 **Date:** 2026-06-12
 **Branch context:** `phase/push-reliability` (work would land on a new branch)
 **Status:** Findings for planning + inspection. Not yet a spec or plan.

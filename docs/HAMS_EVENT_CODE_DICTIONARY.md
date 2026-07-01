@@ -86,6 +86,12 @@ recovery, and UI state, but they are not approved outbound Wialon `event_code`
 values. Wialon will not understand them unless a future admin task creates
 matching report/sensor/notification logic.
 
+<!-- DRAFT 2026-06-29 (WYH), pending SV: Req 4a adds a local `diagnostics` table
+(boot/shutdown/screen_on/screen_off/power_connected/power_disconnected) — device
+audit only, never pushed. No new event_code. Wialon reporting of these (Phase 4b)
+is deferred pending vendor sensor design. See
+docs/superpowers/specs/2026-06-29-vendor-requirements-design.md §4. -->
+
 ### Family 2 — Task lifecycle events
 
 Mark task boundaries and save lifecycle. App-only concepts; not present in P99L
@@ -317,6 +323,7 @@ the params; it does not change the frame structure.
 | `latitude`, `longitude` | double | Required for `+` cut events; nullable only for legacy/diagnostic rows |
 | `hdop` | double | Required when Android supplies it for a valid fix |
 | `satellites` | int | Required when Android supplies it for a valid fix |
+| `speed` | int (km/h) | Native IPS field 7; real GPS ground speed, 0 when unavailable (DRAFT 2026-06-29, pending SV) |
 | `battery_pct` | double 0–100 | Yes (always available via BatteryManager) |
 | `event_code` | int | Yes |
 
