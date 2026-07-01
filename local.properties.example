@@ -1,0 +1,23 @@
+# local.properties.example
+# Copy this file to `local.properties` and fill in real values.
+# NEVER commit the real local.properties (it is gitignored).
+# These keys are read at build time by app/build.gradle.kts and exposed via BuildConfig.
+
+# Android SDK location (point at your installed SDK)
+sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
+
+# --- Wialon IPS gateway (defaults shown; change only if the gateway changes) ---
+IPS_HOST=185.213.1.24
+IPS_PORT=20332
+
+# --- Wialon API token (72 chars; used for seeding + integration tests) ---
+WIALON_TOKEN=<your_72_char_wialon_token>
+
+# --- Device fallback unit id (used only before a device is paired via n8n) ---
+DEVICE_UNIQUE_ID=HAMS_TEST_001
+
+# --- n8n manual-pairing webhooks (must be HTTPS for a real device) + shared secret ---
+# HAMS_CLAIM_SECRET (x-hams-key) must be the SAME value configured on the n8n side.
+MANUAL_CLAIM_URL=https://<your-n8n-host>/webhook/manual-claim
+RELEASE_URL=https://<your-n8n-host>/webhook/release
+HAMS_CLAIM_SECRET=<shared_secret_same_on_app_and_n8n>

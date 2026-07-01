@@ -1,0 +1,357 @@
+package com.klk.hams.data.repository
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.klk.hams.data.db.AppDatabase
+import com.klk.hams.data.model.EventEntity
+import com.klk.hams.data.model.LocationSnapshot
+import com.klk.hams.data.model.Task
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * Instrumented tests for the Codex finding #2 and #3 fixes (2026-05-15).
+ * Runs against an in-memory Room v2 database on a connected device or
+ * emulator via `:app:connectedDebugAndroidTest`.
+ *
+ * Tests are added per the implementation plan
+ * `docs/superpowers/plans/2026-05-15-codex-adversarial-fixes.md`:
+ *   - Task 1.6 — terminal-state semantics
+ *   - Task 2.3 — retention sweep (added when purgeStaleTerminalTasks lands)
+ *   - Task 3.3 — callback-after-commit (added when the hoist lands)
+ */
+@RunWith(AndroidJUnit4::class)
+class TaskRepositoryTest {
+
+    private lateinit var db: AppDatabase
+    private lateinit var repo: TaskRepository
+
+    @Before fun setUp() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        db = Room.inMemoryDatabaseBuilder(ctx, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        repo = TaskRepository(db)
+    }
+
+    @After fun tearDown() { db.close() }
+
+    // ---- Task 1.6 — terminal-state semantics (Codex finding #2) ----
+
+    @Test fun markTaskTerminalState_rejectedEventYieldsFailed() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+        insertEvent(taskId, pushed = 2, eventCode = 179)
+
+        repo.markTaskTerminalState(taskId)
+
+        assertNull(taskById(taskId, "pending"))
+        assertNotNull(taskById(taskId, "failed"))
+        assertNull(taskById(taskId, "uploaded"))
+    }
+
+    @Test fun markTaskTerminalState_allUploadedYieldsUploaded() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+
+        repo.markTaskTerminalState(taskId)
+
+        assertNotNull(taskById(taskId, "uploaded"))
+        assertNull(taskById(taskId, "failed"))
+    }
+
+    @Test fun markTaskTerminalState_anyPendingNoOp() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 0, eventCode = 179)
+
+        repo.markTaskTerminalState(taskId)
+
+        assertNotNull(taskById(taskId, "pending"))
+        assertNull(taskById(taskId, "uploaded"))
+        assertNull(taskById(taskId, "failed"))
+    }
+
+    // ---- Task 2.3 — retention sweep ----
+
+    @Test fun purgeStaleTerminalTasks_deletesOldUploadedFailedDiscarded() = runBlocking {
+        val oldIso = "2020-01-01T00:00:00Z"
+        val recentIso = java.time.Instant.now().toString()
+        val tUploadedOld = insertTaskWithCreatedAt("uploaded", oldIso)
+        val tFailedOld   = insertTaskWithCreatedAt("failed",   oldIso)
+        val tDiscardOld  = insertTaskWithCreatedAt("discarded", oldIso)
+        val tUploadedNew = insertTaskWithCreatedAt("uploaded", recentIso)
+        val tPendingOld  = insertTaskWithCreatedAt("pending",  oldIso)
+
+        val deleted = repo.purgeStaleTerminalTasks(retentionDays = 7)
+
+        assertEquals(3, deleted)
+        assertNull(findById(tUploadedOld))
+        assertNull(findById(tFailedOld))
+        assertNull(findById(tDiscardOld))
+        assertNotNull(findById(tUploadedNew))
+        assertNotNull(findById(tPendingOld))
+    }
+
+    @Test fun purgeStaleTerminalTasks_cascadesEvents() = runBlocking {
+        val oldIso = "2020-01-01T00:00:00Z"
+        val taskId = insertTaskWithCreatedAt("uploaded", oldIso)
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+        assertEquals(2, db.eventDao().countForTask(taskId))
+
+        repo.purgeStaleTerminalTasks(retentionDays = 7)
+
+        assertEquals(0, db.eventDao().countForTask(taskId))
+    }
+
+    // ---- Task 3.3 — callback fires after commit (Codex finding #3) ----
+
+    @Test fun saveActiveTask_callbackFiresAfterCommit() = runBlocking {
+        val started = "2026-05-15T00:00:00Z"
+        db.taskDao().insert(
+            Task(
+                deviceId = "TEST",
+                taskSeq = 1,
+                taskDate = "2026-05-15",
+                startedAt = started,
+                endedAt = null,
+                plusCount = 1,
+                minusCount = 0,
+                netCount = 1,
+                pushStatus = "active",
+                saveType = null,
+                createdAt = started,
+                updatedAt = started,
+            )
+        )
+
+        var observedPending = -1
+        repo.onTaskFinalized = {
+            kotlinx.coroutines.runBlocking {
+                observedPending = db.taskDao().pendingTasks().size
+            }
+        }
+
+        val savedId = repo.saveActiveTask(
+            saveType = "manual",
+            location = null,
+            batteryPct = 90.0,
+        )
+
+        // Pre-fix (callback inside withTransaction) this would have been 0.
+        assertEquals(1, observedPending)
+        assertNotNull(savedId)
+    }
+
+    @Test fun rolloverActiveTaskIfStale_callbackFiresAfterCommit() = runBlocking {
+        // Seed an active task with a stale task_date (year 2020) so rollover
+        // triggers regardless of the device clock's current "today".
+        val yesterdayIso = "2020-01-01T10:00:00Z"
+        db.taskDao().insert(
+            Task(
+                deviceId = "TEST",
+                taskSeq = 1,
+                taskDate = "2020-01-01",
+                startedAt = yesterdayIso,
+                endedAt = null,
+                plusCount = 1,
+                minusCount = 0,
+                netCount = 1,
+                pushStatus = "active",
+                saveType = null,
+                createdAt = yesterdayIso,
+                updatedAt = yesterdayIso,
+            )
+        )
+
+        var observedPending = -1
+        repo.onTaskFinalized = {
+            kotlinx.coroutines.runBlocking {
+                observedPending = db.taskDao().pendingTasks().size
+            }
+        }
+
+        val savedId = repo.rolloverActiveTaskIfStale()
+
+        // Pre-fix the callback observed 0 pending; post-fix it sees the just-
+        // finalised row.
+        assertEquals(1, observedPending)
+        assertNotNull(savedId)
+    }
+
+    @Test fun recordPlus_usesInjectedDeviceIdProviderForNewTask() = runBlocking {
+        repo = TaskRepository(
+            db = db,
+            deviceIdProvider = { "OC154_H099" },
+        )
+
+        repo.recordPlus(
+            location = LocationSnapshot(
+                latDecimal = 2.27,
+                lonDecimal = 103.28,
+                hdop = 1.5,
+                satellites = 8,
+            ),
+            batteryPct = 90.0,
+        )
+
+        assertEquals("OC154_H099", db.taskDao().getActiveTask()?.deviceId)
+    }
+
+    @Test fun eventSpeedColumnRoundTrips() = runBlocking {
+        val taskId = insertPendingTask()
+        db.eventDao().insert(
+            EventEntity(
+                taskId = taskId,
+                eventType = "plus",
+                eventCode = 179,
+                timestamp = "2026-06-29T00:00:00Z",
+                latDecimal = 2.27,
+                lonDecimal = 103.28,
+                hdop = 1.5,
+                satellites = 8,
+                speed = 42,
+                batteryPct = 90.0,
+                workCount = 1,
+                countAfter = 1,
+                pushed = 0,
+                createdAt = "2026-06-29T00:00:00Z",
+            )
+        )
+        val stored = db.eventDao().getPending(10).first { it.taskId == taskId }
+        assertEquals(42, stored.speed)
+    }
+
+    @Test fun recordPlus_persistsSpeedFromSnapshot() = runBlocking {
+        repo.recordPlus(
+            location = LocationSnapshot(
+                latDecimal = 2.27,
+                lonDecimal = 103.28,
+                hdop = 1.5,
+                satellites = 8,
+                speedKmh = 27,
+            ),
+            batteryPct = 90.0,
+        )
+        val plus = db.eventDao().getPending(10).first { it.eventCode == 179 }
+        assertEquals(27, plus.speed)
+    }
+
+    @Test fun diagnosticRoundTrips() = runBlocking {
+        db.diagnosticDao().insert(
+            com.klk.hams.data.model.DiagnosticEntity(
+                type = "boot",
+                timestamp = "2026-06-29T00:00:00Z",
+                batteryPct = 88.0,
+                createdAt = "2026-06-29T00:00:00Z",
+            )
+        )
+        val rows = db.diagnosticDao().recent(10)
+        assertEquals(1, rows.size)
+        assertEquals("boot", rows.first().type)
+        assertEquals(88.0, rows.first().batteryPct!!, 0.001)
+    }
+
+    @Test fun purgeStaleDiagnostics_deletesOldKeepsRecent() = runBlocking {
+        val oldIso = "2020-01-01T00:00:00Z"
+        val recentIso = java.time.Instant.now().toString()
+        db.diagnosticDao().insert(
+            com.klk.hams.data.model.DiagnosticEntity(
+                type = "screen_on", timestamp = oldIso, batteryPct = 50.0, createdAt = oldIso,
+            )
+        )
+        db.diagnosticDao().insert(
+            com.klk.hams.data.model.DiagnosticEntity(
+                type = "screen_off", timestamp = recentIso, batteryPct = 50.0, createdAt = recentIso,
+            )
+        )
+
+        val deleted = repo.purgeStaleDiagnostics(retentionDays = 7)
+
+        assertEquals(1, deleted)
+        val rows = db.diagnosticDao().recent(10)
+        assertEquals(1, rows.size)
+        assertEquals("screen_off", rows.first().type)
+    }
+
+    // ---- helpers ----
+
+    private suspend fun insertPendingTask(): Long {
+        val now = "2026-05-15T00:00:00Z"
+        return db.taskDao().insert(
+            Task(
+                deviceId = "TEST",
+                taskSeq = 1,
+                taskDate = "2026-05-15",
+                startedAt = now,
+                endedAt = now,
+                plusCount = 1,
+                minusCount = 0,
+                netCount = 1,
+                pushStatus = "pending",
+                saveType = "manual",
+                createdAt = now,
+                updatedAt = now,
+            )
+        )
+    }
+
+    private suspend fun insertEvent(taskId: Long, pushed: Int, eventCode: Int) {
+        db.eventDao().insert(
+            EventEntity(
+                taskId = taskId,
+                eventType = "plus",
+                eventCode = eventCode,
+                timestamp = "2026-05-15T00:00:00Z",
+                latDecimal = 2.27,
+                lonDecimal = 103.28,
+                hdop = 1.5,
+                satellites = 8,
+                batteryPct = 90.0,
+                workCount = 1,
+                countAfter = 1,
+                pushed = pushed,
+                createdAt = "2026-05-15T00:00:00Z",
+            )
+        )
+    }
+
+    private suspend fun taskById(id: Long, status: String): Task? =
+        db.taskDao().getByPushStatus(status).firstOrNull { it.id == id }
+
+    private suspend fun insertTaskWithCreatedAt(status: String, createdAt: String): Long {
+        val baseIso = "2026-05-15T00:00:00Z"
+        return db.taskDao().insert(
+            Task(
+                deviceId = "TEST",
+                taskSeq = 1,
+                taskDate = "2026-05-15",
+                startedAt = baseIso,
+                endedAt = baseIso,
+                plusCount = 1,
+                minusCount = 0,
+                netCount = 1,
+                pushStatus = status,
+                saveType = "manual",
+                createdAt = createdAt,
+                updatedAt = baseIso,
+            )
+        )
+    }
+
+    private suspend fun findById(id: Long): Task? =
+        taskById(id, "uploaded")
+            ?: taskById(id, "failed")
+            ?: taskById(id, "discarded")
+            ?: db.taskDao().pendingTasks().firstOrNull { it.id == id }
+            ?: taskById(id, "active")
+}

@@ -1,0 +1,69 @@
+# ==== Secrets / local config ====
+local.properties
+credentials.env
+*.env
+!credentials.env.example
+*.keystore
+*.jks
+
+# ==== Gradle / build outputs ====
+.gradle/
+build/
+app/build/
+out/
+bin/
+gen/
+release/
+
+# ==== Android build ====
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+*.class
+.externalNativeBuild/
+.cxx/
+/captures/
+proguard/
+.navigation/
+
+# ==== IntelliJ / Android Studio ====
+.idea/
+*.iml
+
+# ==== OS ====
+.DS_Store
+Thumbs.db
+
+# ==== Logs ====
+*.log
+
+# ==== API test artifacts (local only) ====
+all_msgs.json
+all_msgs2.json
+hwtypes.json
+login.json
+
+# ==== Physical-device DB pulls (local only) ====
+hams_device.db
+hams_device.db-shm
+hams_device.db-wal
+hams.db
+hams.db-shm
+hams.db-wal
+
+# ==== CI / emulator home dirs (local only) ====
+.android-user-home/
+.gradle-user-home/
+
+# ==== Claude Code per-developer settings (local only) ====
+# settings.local.json holds developer-specific Bash permission allowlists
+# (e.g. `Bash(python3 *)`). Committing it would expand the repo's automation
+# trust boundary for every contributor's Claude workflows. Per-dev only.
+.claude/settings.local.json
+
+# Local artefacts from field-verify runs (logcat captures, PowerShell quirks)
+*_logcat.txt
+hams.db*
+$null
