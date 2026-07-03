@@ -1,5 +1,6 @@
 package com.klk.hams.ui.count
 
+import com.klk.hams.data.location.GpsLockState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

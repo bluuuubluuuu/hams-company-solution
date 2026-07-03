@@ -36,7 +36,7 @@
 - [ ] `FFB_CUT` — Custom, parameter **`ffb_cut`**
 - [ ] `battery_pct` — Custom, parameter **`battery`**, units `%`
 - [ ] *(optional)* `work_count` — Counter, parameter **`work_count`**
-- [ ] *(optional)* `event_code` — Custom, parameter **`event_code`**, calibration 179 / 180 / 35 only
+- [ ] *(optional)* `event_code` — Custom, parameter **`event_code`**, calibration task 179 / 180 / 35 plus final diagnostics telemetry **29 / 40 / 24 / 25 / 41 / 42 / 26 / 27 / 43 / 44**
 
 ### A4 — Reporting / notifications (account-level, not per unit)
 - [ ] Unit added to the V6 report template scope (`HAMS_FFB_Cut_Count_V6`, filter `ffb_cut=1`)
@@ -85,8 +85,10 @@ imported into the n8n claim table (Direction 2, D5).
 - This checklist is the operational form of `CONTEXT.md §5` and
   `docs/vendor/HAMS_INTEGRATION_REFERENCE.md §4–§5`; those remain authoritative for
   exact values.
-- App-side `event_code` policy is fixed: only `179`, productive `180`, `35`
-  ever reach Wialon. Do not add HAMS-local codes to sensors/notifications.
+- App-side `event_code` policy is fixed: task frames send `179`, productive
+  `180`, and `35`; diagnostics telemetry sends final Option B codes **29**,
+  **40**, **24**, **25**, **41**, **42**, **26**, **27**, **43**, **44**.
+  Do not add any other HAMS-local codes to sensors/notifications.
 - Per-unit IPS passwords (hardening, CONTEXT.md "D-future") are out of scope
   for this checklist while the app logs in with `;NA`.
 

@@ -45,16 +45,41 @@ class PushWorker(
         val repo = app.repository
         val pendingTaskIdsBefore = repo.pendingTasks().map { it.id }
         val pendingBeforeCount = pendingTaskIdsBefore.size
+        val hasTelemetry = repo.countPendingTelemetry() > 0
 
         // Phase 3.3 — cross-run campaign tracker. Stable denominator across
         // multiple PushWorker runs while [PushEngine.taskBatchLimit] caps each
         // run to N tasks. Clear stale campaign state if no work exists.
         val campaign = PushCampaign.fromContext(applicationContext)
 
-        if (pendingBeforeCount == 0) {
-            Log.d(TAG, "doWork: no pending tasks, returning success(0)")
+        if (pendingBeforeCount == 0 && !hasTelemetry) {
+            Log.d(TAG, "doWork: no pending tasks or telemetry, returning success(0)")
             campaign.clear()
             return Result.success(workDataOf("tasks" to 0))
+        }
+
+        val provisionedId = provisioningStore.resolveUniqueId()
+        val senderFactory = { WialonIPSClient(uniqueId = provisionedId) }
+
+        if (pendingBeforeCount == 0) {
+            Log.d(TAG, "doWork: no pending tasks; draining telemetry only")
+            campaign.clear()
+            return try {
+                val telemetryState = TelemetryPushEngine(
+                    repo = repo,
+                    senderFactory = senderFactory,
+                ).run()
+                Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
+                when (telemetryState) {
+                    is PushState.Success -> Result.success(workDataOf("tasks" to 0))
+                    is PushState.Partial -> Result.success(workDataOf("tasks" to 0))
+                    is PushState.Failed -> Result.retry()
+                    else -> Result.retry()
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "doWork: telemetry drain failed: $t - retrying via WorkManager backoff", t)
+                Result.retry()
+            }
         }
 
         // Sanity check on resume: if pending exceeds what the campaign expects
@@ -94,10 +119,9 @@ class PushWorker(
         // 2026-05-13). Each callback increments the campaign and re-renders the
         // foreground notification + publishes WorkInfo progress so the user
         // sees campaign-cumulative "X of 43" rather than per-run "X of 10".
-        val provisionedId = provisioningStore.resolveUniqueId()
         val engine = PushEngine(
             repo = PushRepositoryImpl(repo),
-            senderFactory = { WialonIPSClient(uniqueId = provisionedId) },
+            senderFactory = senderFactory,
             taskBatchLimit = AppConfig.PUSH_TASK_BATCH_LIMIT,
             chunkSize = AppConfig.BATCH_SIZE,
             interMessageDelayMs = AppConfig.BATCH_DELAY_MS,
@@ -204,6 +228,12 @@ class PushWorker(
                     Log.w(TAG, "terminal notification suppressed: $se")
                 }
             }
+
+            val telemetryState = TelemetryPushEngine(
+                repo = repo,
+                senderFactory = senderFactory,
+            ).run()
+            Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
 
             when (result) {
                 is PushState.Success -> Result.success(workDataOf("tasks" to tasksUploadedThisRun))

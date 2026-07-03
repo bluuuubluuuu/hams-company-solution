@@ -68,7 +68,7 @@ the Web UI and verify settings the same way the P99L unit was verified.
 |---|---|---|---|
 | `FFB_CUT` | `ffb_cut` | Custom | `1` = cut event |
 | `battery` | `battery` | Custom (units `%`) | Phone battery percent |
-| `event_code` | `event_code` | Custom | Optional calibration: 179 / 180 / 35 |
+| `event_code` | `event_code` | Custom | Optional calibration: task 179 / 180 / 35 plus final diagnostics telemetry **29 / 40 / 24 / 25 / 41 / 42 / 26 / 27 / 43 / 44** |
 | `work_count` | `work_count` | Counter | Displayed/net count per task |
 
 > **Parameter-naming difference from P99L.** The HAMS app uses descriptive
@@ -103,7 +103,7 @@ Standard 16-field IPS v1.1 data frame over TCP, one frame per event.
 ### Custom params block (field 16)
 
 ```
-ffb_cut:1:<0|1>,battery:2:<0.0-100.0>,event_code:1:<179|180|35>,work_count:1:<0..>
+ffb_cut:1:<0|1>,battery:2:<0.0-100.0>,event_code:1:<179|180|35|29|40|24|25|41|42|26|27|43|44>,work_count:1:<0..>
 ```
 
 | Param | Type code | Meaning |
@@ -119,16 +119,26 @@ Expected response per frame: `#AD#1`.
 
 ## 7. Outbound event codes
 
-Only three codes are ever sent to Wialon.
+Task frames send three harvest/heartbeat codes. Diagnostics telemetry sends the final Option B device + Wialon verified codes through a separate telemetry frame path.
 
 | Code | Meaning | Frequency |
 |---|---|---|
 | `179` | FFB cut / plus | Per worker `+` press |
 | `180` | FFB correction / productive minus | Per worker `−` press, only when net count > 0 |
 | `35` | Periodic beacon (heartbeat) | Once per minute while a task is active |
+| **`29`** | Boot | Device boot / app launch recovery |
+| **`40`** | Shutdown | Clean or inferred shutdown |
+| **`24`** | GPS lost | GPS lock lost after dwell |
+| **`25`** | GPS recovery | GPS lock recovered after dwell |
+| **`41`** | Stop moving | Motion detector stop transition |
+| **`42`** | Start moving | Motion detector start transition |
+| **`26`** | Screen off | Android screen-off broadcast |
+| **`27`** | Screen on | Android screen-on broadcast |
+| **`43`** | Power connected | Charger connected |
+| **`44`** | Power disconnected | Charger disconnected |
 
-App-internal lifecycle and health codes are stored on the device only and
-never reach Wialon.
+Legacy HAMS-internal lifecycle and health codes stay on the device unless a
+new Wialon reporting design explicitly approves them.
 
 ---
 

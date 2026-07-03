@@ -1,5 +1,6 @@
 package com.klk.hams.push
 
+import com.klk.hams.data.model.DiagnosticEntity
 import com.klk.hams.data.model.EventEntity
 import java.time.Instant
 import java.time.ZoneOffset
@@ -11,7 +12,7 @@ import java.util.Locale
  *
  * Login frame:  `#L#<unique_id>;NA\r\n`
  *
- * Data frame:
+ * Task data frame:
  * ```
  * #D#DDMMYY;HHMMSS;DDMM.MMMM;N;DDDMM.MMMM;E;speed;course;alt;sats;hdop;
  *    inputs;outputs;adc;ibutton;params\r\n
@@ -93,6 +94,43 @@ object IPSFrameBuilder {
 
         val frame = "#D#$date;$time;$latStr;N;$lonStr;E;" +
             "${event.speed ?: 0};$COURSE;$ALTITUDE;$sats;$hdopStr;" +
+            "$INPUTS;$OUTPUTS;$ADC;$IBUTTON;$params\r\n"
+        return Result.success(frame)
+    }
+
+    fun telemetryFrame(row: DiagnosticEntity): Result<String> {
+        val code = TelemetryCode.eventCodeFor(row.type)
+            ?: return Result.failure(FrameError.UnknownEventCode(-1))
+        val instant = try {
+            Instant.parse(row.timestamp)
+        } catch (_: Exception) {
+            return Result.failure(FrameError.InvalidTimestamp(row.timestamp))
+        }
+
+        val date = DATE_FMT.format(instant)
+        val time = TIME_FMT.format(instant)
+        val hasFix = row.latDecimal != null && row.lonDecimal != null
+        val latStr = if (hasFix) {
+            CoordinateConverter.decimalToDDMM(row.latDecimal!!, 2)
+        } else {
+            "0000.0000"
+        }
+        val lonStr = if (hasFix) {
+            CoordinateConverter.decimalToDDMM(row.lonDecimal!!, 3)
+        } else {
+            "00000.0000"
+        }
+        val sats = if (hasFix) (row.satellites ?: 0) else 0
+        val hdopStr = String.format(Locale.US, "%.1f", row.hdop ?: 0.0)
+        val batteryStr = String.format(Locale.US, "%.2f", row.batteryPct ?: 0.0)
+        val speed = row.speedKmh ?: 0
+
+        val params = "event_code:1:$code," +
+            "battery:2:$batteryStr," +
+            "work_count:1:0"
+
+        val frame = "#D#$date;$time;$latStr;N;$lonStr;E;" +
+            "$speed;$COURSE;$ALTITUDE;$sats;$hdopStr;" +
             "$INPUTS;$OUTPUTS;$ADC;$IBUTTON;$params\r\n"
         return Result.success(frame)
     }

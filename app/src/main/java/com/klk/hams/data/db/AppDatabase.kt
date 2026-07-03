@@ -10,7 +10,7 @@ import com.klk.hams.data.model.Task
 
 @Database(
     entities = [Task::class, EventEntity::class, DiagnosticEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,5 +56,18 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
                 "battery_pct REAL, " +
                 "created_at TEXT NOT NULL)"
         )
+    }
+}
+
+/** Adds telemetry push state + optional GPS snapshot fields to diagnostics. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN pushed INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN lat_decimal REAL")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN lon_decimal REAL")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN hdop REAL")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN satellites INTEGER")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN speed_kmh INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_diagnostics_pushed ON diagnostics(pushed)")
     }
 }

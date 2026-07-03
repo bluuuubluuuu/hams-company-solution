@@ -12,6 +12,11 @@
 > **V6 note:** Phase F and Phase G were added on 2026-04-23. They reverse the V5 conclusion
 > that IPS v1.1 cannot carry custom parameters. V6 uses the 16-field `#D#` frame with native
 > named params (`ffb_cut`, `battery`, `event_code`, `work_count`). See Phase F for evidence.
+>
+> **2026-07-02 diagnostics telemetry update:** the task/harvest path still uses
+> `179`, productive `180`, and `35`; diagnostics telemetry now additionally
+> pushes final device + Wialon verified Option B codes **29/40/24/25/41/42/26/27/43/44**
+> through the separate `diagnostics` / `TelemetryPushEngine` path.
 
 ---
 
@@ -73,7 +78,7 @@ This is the most important architectural decision from testing. Read before impl
 | Frame structure | **16 fields + params block** (V5 used 10 short-form fields) |
 | Per `+` press signal | **`ffb_cut:1:1` named custom parameter** (V5 used `course=1` hack) |
 | Battery reporting | **`battery:2:<pct>` named custom parameter on every event** |
-| Event semantic code | **`event_code:1:<N>` named custom parameter.** As of dictionary v1.2, only 179, 180, and 35 are approved outbound/reporting values. HAMS-local lifecycle/health codes are not pushed unless Wialon admin config gives them meaning. |
+| Event semantic code | **`event_code:1:<N>` named custom parameter.** Task/harvest frames use approved values 179, productive 180, and 35. Diagnostics telemetry additionally uses final Option B values **29/40/24/25/41/42/26/27/43/44** via a separate telemetry path. |
 | Cumulative counter | **`work_count:1:<N>` named custom parameter** (HAMS-defined: current task displayed/net count after the event; resets at task boundary). |
 | Why not WiaTag protocol | Available on license but unnecessary — IPS v1.1 custom params work natively |
 | Why not notification rule | Not needed with messages-tracing template. Removes dependency on event text. |
@@ -357,12 +362,12 @@ server-side meaning.
 | D8 | Notification rule needed for V6 report? | NOT needed — report reads rows directly | ✅ CLOSED |
 | D9 | New report template needed? | YES — filter `ffb_cut=1` | ⚠️ OPEN (admin action F11) |
 | D10 | V6 approach decision | Proceed with V6; route questions to KC | ✅ RESOLVED |
-| D11a | App event_code policy | Only 179/180/35 are approved outbound values. 279/280 dev-code push strategy is suspended. | ⚠️ REOPENED by dictionary v1.2 |
+| D11a | App event_code policy | Task frames use 179/180/35; diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** are final and device + Wialon verified. 279/280 dev-code push strategy remains suspended. | ✅ RESOLVED for diagnostics telemetry 2026-07-02 |
 | D11b | Test/dev isolation strategy | Prefer isolated test units/resources using 179/180; re-approve 279/280 only if Wialon test reports are configured for them. | ⚠️ OPEN |
 | D12 | Push minus press? | **Yes, only when `work_count > 0` after decrement** | ✅ RESOLVED |
 | D13 | Retire V5 FFB_CUT sensor? | Retire after V6 validated — short overlap window | ⚠️ OPEN |
 | D14 | Push new_task (281) to Wialon? | **No — local SQLite only** | ✅ RESOLVED |
-| D15 | Battery alert strategy? | Local edge-triggered state; Wialon sees battery through `battery` param on 179/180/35 messages. | ⚠️ UPDATED |
+| D15 | Battery alert strategy? | Local edge-triggered state; Wialon sees battery through `battery` param on task frames and approved diagnostics telemetry frames. | ⚠️ UPDATED |
 | D16 | Heartbeat policy? | **Fixed-interval timer, default 10 min, configurable 5–60 min, value 0 disables** | ✅ RESOLVED |
 | D-future | Per-unit IPS password hardening | Current `NA` works. Future phase: per-unit passwords for production deployment. | ⚠️ Deferred |
 
@@ -378,9 +383,9 @@ server-side meaning.
 | 4 | Replace V5 template ID in `CONTEXT.md` | After step 3 delivers new ID | HIGH | Open |
 | 5 | KC operational contact for V6 questions | Use KC for any unresolved rollout questions | HIGH | Resolved |
 | 6 | Apply V6 sensor config to production OC 154 units | At production rollout, after test unit/template are proven | MEDIUM | Open |
-| 7 | Resolve dev/test event-code strategy (D11) | Preferred: isolated test units/resources using 179/180. Do not push 279/280 unless re-approved. | HIGH | Open |
+| 7 | Resolve dev/test event-code strategy (D11) | Task 179/180 tests still use isolated resources; diagnostics telemetry Option B codes are final. Do not push 279/280 unless re-approved. | HIGH | Partially resolved |
 | 8 | (Optional) Create `work_count` sensor | Counter, parameter `work_count` | LOW | Open |
-| 9 | (Optional) Create `event_code` sensor with calibration | Custom, parameter `event_code`, calibration only for approved outbound values 179/180/35 unless more Wialon rules are created | LOW | Open |
+| 9 | (Optional) Create `event_code` sensor with calibration | Custom, parameter `event_code`, calibration for task 179/180/35 plus final diagnostics telemetry **29/40/24/25/41/42/26/27/43/44** when telemetry reporting is enabled | LOW | Open |
 | 10 | **Rotate API token** | Token was shared during V6 testing session | HIGH | Open |
 
 ---
@@ -399,7 +404,7 @@ server-side meaning.
 | Minus press visibility | Local only | Pushed (when productive) |
 | Auto-save visibility | Silent | Local SQLite/task state unless Wialon admin config is added |
 | GPS data quality alerts | None | Local telemetry unless Wialon admin config is added |
-| Event vocabulary | 1 concept (press) | 3 approved outbound codes plus local app telemetry |
+| Event vocabulary | 1 concept (press) | 3 task outbound codes plus final diagnostics telemetry Option B codes |
 | Extensibility for new features | Need protocol workaround | Add a new param name — zero protocol change |
 | Infrastructure change | — | None — same port, protocol, license, hw_type |
 
@@ -414,7 +419,7 @@ sorting until matching Wialon configuration exists.
 1. **Codex proceeds with Phase 0 → Phase 3 app implementation** per `CLAUDE.md` and `plans/`
 2. **Admin performs actions 1–3** above on TEST_HAMS_APP_001
 3. **Record the V6 template ID** in `CONTEXT.md` and the N8N daily pull workflow config
-4. **Phase 4 integration test** — push approved outbound event codes only (179, productive 180, 35) → verify via REST + UI
+4. **Phase 4 integration test** — push approved task event codes (179, productive 180, 35) plus final diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** → verify via REST + UI
 5. **Production cutover planning with KC** — isolate test units/resources, then deliberately add app units to 179/180 production notification scope
 6. **Retire V5 sensor & template** — after V6 proven stable in production for at least one month (D13)
 7. **Rotate API token** immediately

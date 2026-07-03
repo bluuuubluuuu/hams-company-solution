@@ -20,13 +20,24 @@ class DeviceEventReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val type = DiagnosticType.fromAction(intent.action) ?: return
         val battery = readBatteryPct(context)
-        val repo = (context.applicationContext as HamsApp).repository
+        val app = context.applicationContext as HamsApp
+        val repo = app.repository
         // goAsync() keeps the broadcast alive until the DB write finishes.
         // Critical for ACTION_SHUTDOWN (best-effort delivery) where a fire-and-
         // forget coroutine would be killed with the process (Codex review 2026-06-29).
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            try { repo.recordDiagnostic(type, battery) } finally { pending.finish() }
+            try {
+                val snapshot = app.locationStream.snapshotFlow.value
+                repo.recordDiagnostic(type, battery, snapshot)
+                // Clean shutdown observed: the real 40 is recorded, so the next
+                // boot must not backfill one (see ShutdownTracker).
+                if (type == DiagnosticType.SHUTDOWN) {
+                    ShutdownTracker.markCleanShutdown(context)
+                }
+            } finally {
+                pending.finish()
+            }
         }
     }
 

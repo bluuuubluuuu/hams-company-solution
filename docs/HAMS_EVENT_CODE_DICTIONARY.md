@@ -1,15 +1,41 @@
 # HAMS V2 — Event Code Dictionary
 
-**Document Version:** 1.2
-**Last Updated:** 2026-04-30
+**Document Version:** 1.3
+**Last Updated:** 2026-07-02
 **Status:** Canonical reference for all HAMS V2 event codes
 
 > **Source-of-truth note (v1.2, 2026-04-30):** `event_code` is an outbound
 > Wialon/reporting semantic, not HAMS's private app event enum. HAMS may keep
 > local lifecycle/health events in SQLite, but only the validated reporting
-> values listed under "Approved outbound Wialon event_code values" should be
-> sent to Wialon unless KC/Wialon admin deliberately creates matching reports,
-> sensors, or notification rules.
+> values listed under "Approved outbound Wialon event_code values" and the final
+> diagnostics telemetry Option B section should be sent to Wialon unless KC/Wialon
+> admin deliberately creates matching reports, sensors, or notification rules.
+
+---
+
+## Diagnostics Telemetry Outbound Codes (Option B - FINAL 2026-07-02)
+
+New outbound diagnostics/behaviour telemetry. Each action pushes under its **own**
+`event_code` (no `diag_type` param), sourced from the MeiTrack P99G GPRS list;
+power 43/44 are HAMS-custom (P99G has no charging event). This **admits new
+outbound codes beyond 179/180/35** for these diagnostic telemetry values.
+Option B is device + Wialon verified; no owner-supplied code file is pending.
+
+| event_code | Action | Source |
+|---|---|---|
+| **29** | Boot / device reboot | P99G Device Reboot |
+| **40** | Shutdown / power off | P99G Power Off |
+| **24** | GPS lost | P99G GPS Signal Lost |
+| **25** | GPS recovery | P99G GPS Signal Recovery |
+| **41** | Stop moving | P99G Stop Moving |
+| **42** | Start moving | P99G Start Moving |
+| **26** | Screen off | P99G Enter Sleep (analog) |
+| **27** | Screen on | P99G Exit Sleep (analog) |
+| **43** | Power connected | HAMS-custom |
+| **44** | Power disconnected | HAMS-custom |
+
+Wialon-side sensors/reports must be configured per code for these to surface. No
+collision with 179/180/35 or local-only 279/280/281/283/284/291/292/293.
 
 ---
 
@@ -32,8 +58,10 @@ report, sensor calibration, or notification rule for a value, that value is only
 stored as an opaque custom parameter and is not useful for supervisor sorting.
 
 HAMS internal events should be represented with local fields such as
-`event_type`, `save_type`, task state, `pushed`, and SQLite-only rows. Do not
-invent outbound `event_code` values just to model app lifecycle or diagnostics.
+`event_type`, `save_type`, task state, `pushed`, and SQLite-only rows. The
+diagnostics telemetry values listed in the Option B table above are the approved
+exception: they are server-facing Wialon event codes and are pushed from the
+`diagnostics` table through the separate telemetry frame path.
 
 `ffb_cut` is **not** stored as a SQLite column. The V6 frame builder derives it
 from approved outbound event codes: `179` maps to `ffb_cut=1`; `180` and `35`
@@ -54,11 +82,12 @@ state until a Wialon-side rule/report exists.
 
 ---
 
-## Approved outbound Wialon event_code values
+## Approved Outbound Wialon Event Codes
 
-Only the following values are approved to be sent to Wialon in the `event_code`
-custom parameter right now. Other HAMS app concepts may still exist locally, but
-they must not be pushed as custom `event_code` values unless Wialon admin work
+Only the following task/system values are approved to be sent to Wialon in the
+`event_code` custom parameter right now. Diagnostics telemetry has its own final
+Option B outbound-code set above. Other HAMS app concepts may still exist locally,
+but they must not be pushed as custom `event_code` values unless Wialon admin work
 creates a matching report/sensor/notification contract.
 
 ### Family 1 — Counting events
@@ -79,18 +108,13 @@ codes requires an explicit later decision.
 | 179 | FFB cut (prod) | + press, one FFB cut, production event_code (matches existing Wialon notification rule scope) | Yes | Yes, always |
 | 180 | FFB correction (prod) | − press, production event_code (matches existing Wialon notification rule scope) | Yes | **Only if `work_count > 0` after decrement** |
 
-## Local-only HAMS app events
+## Local-only HAMS App Events
 
 These are internal app concepts. They may be stored in SQLite for audit,
 recovery, and UI state, but they are not approved outbound Wialon `event_code`
-values. Wialon will not understand them unless a future admin task creates
-matching report/sensor/notification logic.
-
-<!-- DRAFT 2026-06-29 (WYH), pending SV: Req 4a adds a local `diagnostics` table
-(boot/shutdown/screen_on/screen_off/power_connected/power_disconnected) — device
-audit only, never pushed. No new event_code. Wialon reporting of these (Phase 4b)
-is deferred pending vendor sensor design. See
-docs/superpowers/specs/2026-06-29-vendor-requirements-design.md §4. -->
+values. This section does not include the final diagnostics telemetry Option B
+codes (`24`, `25`, `26`, `27`, `29`, `40`, `41`, `42`, `43`, `44`), which are
+approved outbound values.
 
 ### Family 2 — Task lifecycle events
 
@@ -123,9 +147,10 @@ Battery and GPS anomaly signals. Satisfies the vendor's anti-mischarging and dat
 
 ### Total
 
-- Approved outbound Wialon `event_code` values: **3** (`179`, `180`, `35`)
-- Local/custom HAMS app codes currently still present in source/docs pending
-  redesign: **8** (`279`, `280`, `281`, `283`, `284`, `291`, `292`, `293`)
+- Approved outbound task/system `event_code` values: **3** (`179`, `180`, `35`)
+- Approved outbound diagnostics telemetry `event_code` values: **10**
+  (`24`, `25`, `26`, `27`, `29`, `40`, `41`, `42`, `43`, `44`)
+- Local/custom HAMS app codes: **8** (`279`, `280`, `281`, `283`, `284`, `291`, `292`, `293`)
 
 ---
 
@@ -154,6 +179,8 @@ emitted by P99L hardware and are not currently referenced by any Wialon
 report/sensor/notification rule. They are **not approved as outbound Wialon
 `event_code` values**. Keep them local or replace them with ordinary params and
 task state unless KC/Wialon admin explicitly creates a server-side contract.
+The final diagnostics telemetry Option B codes are already approved and are not
+part of this local-only list.
 
 | Code | Purpose | Current policy |
 |---|---|---|
@@ -166,17 +193,17 @@ task state unless KC/Wialon admin explicitly creates a server-side contract.
 | 292 | Battery critical (< 10%) | Same as 291; derive criticality from `battery <= 10` if Wialon reports need it later. |
 | 293 | GPS degraded (HDOP > 5) | Local telemetry until a Wialon rule/report is explicitly designed. |
 
-**Implication for the codebase.** The current Task 2.4 branch still contains
-pre-v1.2 code that treats several HAMS-custom values as pushable. Do not commit
-that implementation as-is. Before Task 2.4 can land, update the push boundary so
-only `179`, `180` (when productive), and `35` are eligible outbound events.
-Existing HAMS-custom constants may remain as internal/local identifiers, but
-`IPSFrameBuilder`, `PushEligibility`, pending SQL, and tests must stop treating
-them as pushable Wialon `event_code` values.
+**Implication for the codebase.** The task-event push boundary still accepts only
+`179`, `180` (when productive), and `35` from the `events` table. Diagnostics
+telemetry uses a separate `diagnostics` table, `TelemetryCode`, `telemetryFrame`,
+and `TelemetryPushEngine` path for the final Option B values. Existing
+HAMS-custom constants may remain as internal/local identifiers, but
+`PushEligibility`, `EventDao`, and the task `dataFrame` path must not treat them
+as pushable Wialon `event_code` values.
 
 - `app/src/main/java/com/klk/hams/AppConfig.kt` — `EVENT_CODE_*` constants
-- `app/src/main/java/com/klk/hams/push/IPSFrameBuilder.kt` — `VALID_CODES`,
-  `PLUS_CODES`
+- `app/src/main/java/com/klk/hams/push/IPSFrameBuilder.kt` — task `VALID_CODES`,
+  task `PLUS_CODES`, and separate telemetry frame path
 - `app/src/main/java/com/klk/hams/push/PushEligibility.kt` — `when` branches
 - `app/src/main/java/com/klk/hams/data/db/EventDao.kt` — pending-push filters
   should include only outbound-approved codes, not just exclude known local ones
@@ -184,8 +211,9 @@ them as pushable Wialon `event_code` values.
 - `CONTEXT.md` § 5.3 calibration table
 
 Do **not** change 179/180 without coordinating with KC and the Wialon admin.
-Do **not** add any new outbound custom `event_code` without a matching Wialon
-report/sensor/notification design.
+Do **not** add any new outbound custom `event_code` beyond the task/system and
+Option B telemetry values without a matching Wialon report/sensor/notification
+design.
 
 ---
 
@@ -304,6 +332,16 @@ meaningful Wialon messages without custom battery event codes.
 | Battery threshold crossing | local telemetry/edge state | none; use `battery` param on 179/180/35 |
 | GPS degraded | local telemetry/diagnostic state | none until Wialon rule/report exists |
 | Periodic timer tick | heartbeat/beacon event row | `35` |
+| Boot / device reboot | `diagnostics.type='boot'` | **`29`** |
+| Shutdown / power off | `diagnostics.type='shutdown'`; real broadcast or boot-time backfill | **`40`** |
+| GPS lost | `diagnostics.type='gps_lost'` | **`24`** |
+| GPS recovery | `diagnostics.type='gps_recovery'` | **`25`** |
+| Screen off | `diagnostics.type='screen_off'` | **`26`** |
+| Screen on | `diagnostics.type='screen_on'` | **`27`** |
+| Stop moving | `diagnostics.type='stop_moving'` | **`41`** |
+| Start moving | `diagnostics.type='start_moving'` | **`42`** |
+| Power connected | `diagnostics.type='power_connected'` | **`43`** |
+| Power disconnected | `diagnostics.type='power_disconnected'` | **`44`** |
 
 See `CLAUDE.md` V6 patch for implementation details on each.
 
@@ -323,7 +361,7 @@ the params; it does not change the frame structure.
 | `latitude`, `longitude` | double | Required for `+` cut events; nullable only for legacy/diagnostic rows |
 | `hdop` | double | Required when Android supplies it for a valid fix |
 | `satellites` | int | Required when Android supplies it for a valid fix |
-| `speed` | int (km/h) | Native IPS field 7; real GPS ground speed, 0 when unavailable (DRAFT 2026-06-29, pending SV) |
+| `speed` | int (km/h) | Native IPS field 7; real GPS ground speed, 0 when unavailable |
 | `battery_pct` | double 0–100 | Yes (always available via BatteryManager) |
 | `event_code` | int | Yes |
 
@@ -334,12 +372,13 @@ the params; it does not change the frame structure.
 | 179 | `ffb_cut=1` | Core +press |
 | 180 | `ffb_cut=0` | Productive −press/correction |
 | 35 | `ffb_cut=0` | Periodic beacon; piggybacks `battery` and `work_count` |
+| 24 / 25 / 26 / 27 / 29 / 40 / 41 / 42 / 43 / 44 | no `ffb_cut`; `work_count=0` | Diagnostics telemetry from the `diagnostics` table. Coordinates are included when a last-known/current GPS snapshot exists; otherwise the telemetry frame uses zero coordinates. |
 
 ---
 
 ## What Wialon does with each event
 
-For pushed events (`179`, productive `180`, and `35`):
+For pushed task/system events (`179`, productive `180`, and `35`):
 
 1. IPS gateway accepts the `#D#` frame, returns `#AD#1`
 2. Message stored against the unit with timestamp, GPS, and `p` block containing named params
@@ -347,11 +386,17 @@ For pushed events (`179`, productive `180`, and `35`):
 4. V6 report template filters to rows where `ffb_cut=1` → counts those as cuts
 5. Periodic beacons (`35`) appear in Messages tab but not in the cut count report
 
-Do not assume Wialon understands HAMS-local lifecycle/health events. If KC later
-needs supervisor alerts for phone died, low battery, or GPS quality, first design
-the Wialon-side report/sensor/notification rule, then choose a server-facing
-signal deliberately. Until that exists, battery is visible through the normal
-`battery` param on 179/180/35 messages.
+For diagnostics telemetry events (`24`, `25`, `26`, `27`, `29`, `40`, `41`,
+`42`, `43`, `44`), Wialon stores a normal IPS message with `event_code`,
+`battery`, and `work_count=0`. These messages are for operational diagnostics
+and behaviour review, not cut-count reporting; Wialon-side sensors/reports must
+group or alert on those codes deliberately.
+
+Do not assume Wialon understands other HAMS-local lifecycle/health events. If KC
+later needs supervisor alerts beyond the final Option B set, first design the
+Wialon-side report/sensor/notification rule, then choose a server-facing signal
+deliberately. Until that exists, battery is visible through the normal `battery`
+param on pushed task/system and telemetry messages.
 
 ---
 
@@ -385,12 +430,13 @@ behaviour.
 | 1.0 | 2026-04-23 | Initial dictionary, 10 codes across 4 families |
 | 1.1 | 2026-04-30 | Added "Verification status per code" tiers (A/B/C). Reworded the Family 1 P99L claim — 179/180 are verified from existing Wialon notification rules, not from P99L firmware codes. Reworded Family 4 code 35 — verified from `Meitreck_p99l_protocol.pdf` § 1.3 as "Track By Time Interval"; HAMS keeps the local "heartbeat" label. No numeric values changed. |
 | 1.2 | 2026-04-30 | Tightened policy: only 179, 180, and 35 are approved outbound Wialon `event_code` values. HAMS-custom codes 279/280/281/283/284/291/292/293 are local/internal unless future Wialon admin configuration gives them reporting meaning. Task 2.4 must be redesigned before commit. |
+| 1.3 | 2026-07-02 | Added final, device + Wialon verified diagnostics telemetry Option B outbound codes: 24, 25, 26, 27, 29, 40, 41, 42, 43, 44. The task-event push path remains limited to 179/180/35; diagnostics telemetry pushes through a separate `diagnostics` table and telemetry frame path. |
 
 ---
 
 ## Decisions captured here (cross-reference V6 checkpoint)
 
-- **D11** — outbound event-code policy: only 179/180/35 are approved for Wialon now; 279/280 dev-code push strategy is suspended pending explicit approval
+- **D11** — outbound event-code policy: task/system events use 179/180/35; diagnostics telemetry Option B additionally approves 24/25/26/27/29/40/41/42/43/44. 279/280 dev-code push strategy remains suspended pending explicit approval
 - **D12** — minus press push policy: push 180 only when `work_count > 0` after decrement
 - **D14** — new task (281) policy: SQLite only, never pushed to Wialon
 - **D15** — battery alert policy: local edge-triggered state only for now; battery level rides pushed 179/180/35 messages as a common param

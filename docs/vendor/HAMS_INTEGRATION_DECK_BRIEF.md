@@ -111,7 +111,7 @@ Title: **Sensors**
 |---|---|---|---|
 | `FFB_CUT` | `ffb_cut` | Custom | `1` = cut event |
 | `battery` | `battery` | Custom (units `%`) | Phone battery percent |
-| `event_code` | `event_code` | Custom | Optional calibration: 179 / 180 / 35 |
+| `event_code` | `event_code` | Custom | Optional calibration: task 179 / 180 / 35 plus final diagnostics telemetry **29 / 40 / 24 / 25 / 41 / 42 / 26 / 27 / 43 / 44** |
 | `work_count` | `work_count` | Counter | Displayed/net count per task |
 
 Call-out: *Parameter-naming difference from P99L — the HAMS app uses descriptive parameter names (`ffb_cut`, `battery`, `event_code`, `work_count`) instead of P99L's short single-letter names. Both are valid per IPS v1.1, but Wialon sensors created for HAMS units must use the descriptive names shown above.*
@@ -142,7 +142,7 @@ Title: **Custom Params (Field 16)**
 
 Monospace:
 ```
-ffb_cut:1:<0|1>,battery:2:<0.0-100.0>,event_code:1:<179|180|35>,work_count:1:<0..>
+ffb_cut:1:<0|1>,battery:2:<0.0-100.0>,event_code:1:<179|180|35|29|40|24|25|41|42|26|27|43|44>,work_count:1:<0..>
 ```
 
 | Param | Type | Meaning |
@@ -160,8 +160,18 @@ Title: **Event Codes**
 | `179` | FFB cut / plus | Per worker `+` press |
 | `180` | FFB correction / productive minus | Per `−` press, only when net count > 0 |
 | `35` | Periodic beacon (heartbeat) | Once per minute while a task is active |
+| **`29`** | Boot | Device boot / app launch recovery |
+| **`40`** | Shutdown | Clean or inferred shutdown |
+| **`24`** | GPS lost | GPS lock lost after dwell |
+| **`25`** | GPS recovery | GPS lock recovered after dwell |
+| **`41`** | Stop moving | Motion detector stop transition |
+| **`42`** | Start moving | Motion detector start transition |
+| **`26`** | Screen off | Android screen-off broadcast |
+| **`27`** | Screen on | Android screen-on broadcast |
+| **`43`** | Power connected | Charger connected |
+| **`44`** | Power disconnected | Charger disconnected |
 
-Footnote: App-internal lifecycle / health codes are stored on the device only; never reach Wialon.
+Footnote: Legacy HAMS-internal lifecycle / health codes stay on-device unless a new Wialon reporting design explicitly approves them. The Option B diagnostics telemetry codes above are final.
 
 ### Slide 10 — Push trigger & batching
 Title: **Push Trigger and Batching**
@@ -195,7 +205,7 @@ Title: **What the App Does Not Send**
 - No ADC values
 - No driver / ibutton key (sent as `NA`)
 - No heading on `course` (= `0`; legacy V5 `course=1` FFB-hack is removed)
-- No HAMS-internal lifecycle / health event codes — kept on-device
+- No legacy HAMS-internal lifecycle / health event codes; only the final Option B diagnostics telemetry codes are sent
 - No data flows back from Wialon to the app — uplink only
 
 ### Slide 12 — How to verify

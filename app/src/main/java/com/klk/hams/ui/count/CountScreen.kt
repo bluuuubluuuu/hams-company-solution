@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.klk.hams.AppConfig
+import com.klk.hams.data.location.GpsLockState
 import com.klk.hams.push.PushUiState
 import com.klk.hams.ui.theme.FieldAmber
 import com.klk.hams.ui.theme.FieldEarth

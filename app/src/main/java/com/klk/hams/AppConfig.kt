@@ -27,12 +27,13 @@ object AppConfig {
     // [com.klk.hams.push.PushCampaign].
     const val PUSH_TASK_BATCH_LIMIT: Int = 10
 
-    // Outbound-approved Wialon event_code values (dictionary v1.2, 2026-04-30):
+    // Outbound-approved Wialon event_code values for the existing task-event path:
     //   179 = FFB plus / cut
     //   180 = FFB productive minus / correction (push only when work_count > 0)
     //    35 = periodic beacon ("heartbeat" in HAMS code/UI; P99L "Track By Time Interval")
-    // These are the only values IPSFrameBuilder will accept on the wire and the
-    // only values PushEligibility will queue with pushed=0.
+    // These remain the only values EventDao/PushEligibility queue from the events
+    // table. Diagnostics telemetry uses its own diagnostics table + TelemetryCode
+    // path, where Option B adds per-action outbound codes.
     const val EVENT_CODE_PLUS: Int = 179
     const val EVENT_CODE_MINUS: Int = 180
     const val EVENT_CODE_HEARTBEAT: Int = 35
@@ -91,6 +92,16 @@ object AppConfig {
     // to Locked is quick. Eliminates pill-color flicker at the staleness boundary.
     const val GPS_LOCK_STALE_AFTER_MS: Long = 8_000
     const val GPS_LOCK_RELOCK_BELOW_MS: Long = 3_000
+
+    // Behaviour telemetry - GPS lost/recovery must be SUSTAINED this long before a
+    // diagnostic fires, so intermittent-signal flapping doesn't spam Wialon with
+    // lost/recovery pairs. Only genuine, held losses/recoveries are reported.
+    const val GPS_EVENT_DWELL_MS: Long = 20_000
+
+    // Behaviour telemetry: motion state detector (diagnostics telemetry push, 2026-07-02).
+    const val MOTION_START_SPEED_KMH: Double = 1.5
+    const val MOTION_STOP_SPEED_KMH: Double = 0.5
+    const val MOTION_DEBOUNCE_MS: Long = 15_000
 
     // Manual push session config (Task 2.8 spec).
     const val PUSH_MANUAL_TIMEOUT_MS: Long = 30L * 60_000L

@@ -1,14 +1,7 @@
 package com.klk.hams.ui.count
 
 import com.klk.hams.AppConfig
-
-enum class GpsLockState {
-    NoPermission,
-    Acquiring,
-    Locked,
-    Stale,
-    LocationDisabled
-}
+import com.klk.hams.data.location.GpsLockState
 
 data class CountUiState(
     val count: Int = 0,

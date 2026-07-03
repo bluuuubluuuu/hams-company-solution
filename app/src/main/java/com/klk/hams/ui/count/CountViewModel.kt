@@ -12,6 +12,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.klk.hams.AppConfig
 import com.klk.hams.HamsApp
+import com.klk.hams.data.location.GpsLockEvaluator
+import com.klk.hams.data.location.GpsLockState
 import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
 import kotlinx.coroutines.Job
@@ -356,14 +358,7 @@ class CountViewModel(
             ageMs: Long,
             staleAfterMs: Long = AppConfig.GPS_LOCK_STALE_AFTER_MS,
             relockBelowMs: Long = AppConfig.GPS_LOCK_RELOCK_BELOW_MS
-        ): GpsLockState = when (current) {
-            GpsLockState.Locked ->
-                if (ageMs > staleAfterMs) GpsLockState.Stale else GpsLockState.Locked
-            GpsLockState.Stale,
-            GpsLockState.Acquiring,
-            GpsLockState.NoPermission,
-            GpsLockState.LocationDisabled ->
-                if (ageMs < relockBelowMs) GpsLockState.Locked else GpsLockState.Stale
-        }
+        ): GpsLockState =
+            GpsLockEvaluator.next(current, ageMs, staleAfterMs, relockBelowMs)
     }
 }

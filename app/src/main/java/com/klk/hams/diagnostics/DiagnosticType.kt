@@ -8,7 +8,11 @@ enum class DiagnosticType(val wire: String) {
     SCREEN_ON("screen_on"),
     SCREEN_OFF("screen_off"),
     POWER_CONNECTED("power_connected"),
-    POWER_DISCONNECTED("power_disconnected");
+    POWER_DISCONNECTED("power_disconnected"),
+    START_MOVING("start_moving"),
+    STOP_MOVING("stop_moving"),
+    GPS_LOST("gps_lost"),
+    GPS_RECOVERY("gps_recovery");
 
     companion object {
         fun fromAction(action: String?): DiagnosticType? = when (action) {

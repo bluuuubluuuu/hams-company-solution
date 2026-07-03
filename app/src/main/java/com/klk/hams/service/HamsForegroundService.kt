@@ -11,9 +11,13 @@ import androidx.core.app.NotificationCompat
 import com.klk.hams.HamsApp
 import com.klk.hams.MainActivity
 import com.klk.hams.data.location.LocationStream
+import com.klk.hams.diagnostics.GpsLockTransition
+import com.klk.hams.diagnostics.MotionDetector
 import com.klk.hams.provisioning.ProvisioningStore
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
@@ -22,6 +26,8 @@ class HamsForegroundService : Service() {
     private val batteryEdgeObserver by lazy { BatteryEdgeObserver(applicationContext) }
     private val heartbeat by lazy { HeartbeatScheduler(applicationContext) }
     private val deviceEventReceiver = com.klk.hams.diagnostics.DeviceEventReceiver()
+    private val motionDetector = MotionDetector()
+    private val gpsLockDetector = GpsLockTransition()
 
     private val wifiPushMonitor by lazy {
         WifiPushMonitor(applicationContext) {
@@ -44,9 +50,16 @@ class HamsForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        // Shutdown-40 guarantee: mark the session live so an unclean power-off is
+        // detectable on the next boot (see ShutdownTracker). NOT cleared in
+        // onDestroy - a normal service stop is not a device shutdown; only
+        // ACTION_SHUTDOWN clears it.
+        com.klk.hams.diagnostics.ShutdownTracker.markSessionStarted(applicationContext)
+        observeLastSeen()
         batteryEdgeObserver.register()
         heartbeat.start()
         observeActiveTaskForGps()
+        observeTelemetryDetectors()
         wifiPushMonitor.register()
         observePushStateForNotification()
         val diagFilter = android.content.IntentFilter().apply {
@@ -75,6 +88,56 @@ class HamsForegroundService : Service() {
                     app.locationStream.stop(LocationStream.REASON_TASK_ACTIVE)
                     gpsHeld = false
                 }
+            }
+        }
+    }
+
+    /**
+     * Periodically stamp `last_seen` while the service is alive. If the device
+     * later powers off uncleanly (no ACTION_SHUTDOWN), the next boot backfills a
+     * shutdown dated at this last stamp. Written immediately, then on a cadence.
+     */
+    private fun observeLastSeen() {
+        serviceScope.launch {
+            while (isActive) {
+                com.klk.hams.diagnostics.ShutdownTracker.updateLastSeen(
+                    applicationContext, com.klk.hams.time.Clock.nowUtcIso()
+                )
+                delay(LAST_SEEN_TICK_MS)
+            }
+        }
+    }
+
+    private fun observeTelemetryDetectors() {
+        val app = application as HamsApp
+        // Motion: event-driven. Speed only arrives with a fresh fix, and the
+        // stream emits nothing while stopped, so this is naturally scoped to
+        // active streaming (a stale speed can never re-fire a motion transition).
+        serviceScope.launch {
+            app.locationStream.snapshotFlow.collect { snapshot ->
+                if (snapshot == null) return@collect
+                val nowMs = android.os.SystemClock.elapsedRealtime()
+                motionDetector.onSpeed(snapshot.speedKmh, nowMs)?.let { type ->
+                    app.repository.recordDiagnostic(type, readBatteryPct(), snapshot)
+                }
+            }
+        }
+        // GPS lock: periodic tick. GPS_LOST needs a growing snapshot age even when
+        // NO new fix arrives - the StateFlow does not re-emit during signal loss -
+        // so we poll the current age, mirroring the UI's STALE_RECHECK_MS re-check.
+        // Only while the stream is actually held (active task / foreground); a task
+        // simply ending (stream stop) must not look like GPS loss.
+        serviceScope.launch {
+            while (isActive) {
+                if (app.locationStream.isStreaming()) {
+                    val nowMs = android.os.SystemClock.elapsedRealtime()
+                    val snapshot = app.locationStream.snapshotFlow.value
+                    val ageMs = if (snapshot != null) nowMs - snapshot.capturedAtMs else Long.MAX_VALUE
+                    gpsLockDetector.onSnapshotAge(ageMs, nowMs)?.let { type ->
+                        app.repository.recordDiagnostic(type, readBatteryPct(), snapshot)
+                    }
+                }
+                delay(GPS_LOCK_TICK_MS)
             }
         }
     }
@@ -211,6 +274,14 @@ class HamsForegroundService : Service() {
         const val CHANNEL_ID = "hams_service_channel"
         const val NOTIFICATION_ID = 1001
         private const val TAG = "HAMS_PUSH"
+
+        /** GPS-lock detector poll cadence - matches the UI's STALE_RECHECK_MS so
+         *  GPS_LOST/GPS_RECOVERY fire on staleness even without new fixes. */
+        private const val GPS_LOCK_TICK_MS: Long = 1_000
+
+        /** Liveness-stamp cadence for the shutdown-40 backfill (see ShutdownTracker).
+         *  Bounds backfill date accuracy to ~1 min. */
+        private const val LAST_SEEN_TICK_MS: Long = 60_000
 
         /** True while the service is alive — read by PushWorker to decide whether
          *  it needs its own foreground notification. */

@@ -7,6 +7,7 @@ import com.klk.hams.data.model.EventEntity
 import com.klk.hams.data.model.LocationSnapshot
 import com.klk.hams.data.model.Task
 import com.klk.hams.push.PushEligibility
+import com.klk.hams.push.TelemetryRepository
 import com.klk.hams.time.Clock
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -17,7 +18,7 @@ class TaskRepository(
     private val db: AppDatabase,
     private val clock: com.klk.hams.time.Clock = Clock,
     private val deviceIdProvider: () -> String = { AppConfig.DEVICE_UNIQUE_ID },
-) {
+) : TelemetryRepository {
     private val taskDao = db.taskDao()
     private val eventDao = db.eventDao()
     private val diagnosticDao = db.diagnosticDao()
@@ -26,15 +27,32 @@ class TaskRepository(
     @Volatile
     var onTaskFinalized: (() -> Unit)? = null
 
-    /** Local-only device lifecycle audit row (Req 4a). Never pushed to Wialon. */
-    suspend fun recordDiagnostic(type: com.klk.hams.diagnostics.DiagnosticType, batteryPct: Double?) {
+    /**
+     * Device/behaviour telemetry row. Pushed via the diagnostics telemetry drain.
+     *
+     * [timestampIso] overrides the event time only (not `created_at`): used to
+     * backfill a missed shutdown dated at the last-seen instant while keeping the
+     * row's creation time fresh so the retention sweep does not purge it early.
+     */
+    suspend fun recordDiagnostic(
+        type: com.klk.hams.diagnostics.DiagnosticType,
+        batteryPct: Double?,
+        snapshot: LocationSnapshot? = null,
+        timestampIso: String? = null,
+    ) {
         val now = clock.nowUtcIso()
         diagnosticDao.insert(
             com.klk.hams.data.model.DiagnosticEntity(
                 type = type.wire,
-                timestamp = now,
+                timestamp = timestampIso ?: now,
                 batteryPct = batteryPct,
                 createdAt = now,
+                pushed = 0,
+                latDecimal = snapshot?.latDecimal,
+                lonDecimal = snapshot?.lonDecimal,
+                hdop = snapshot?.hdop,
+                satellites = snapshot?.satellites,
+                speedKmh = snapshot?.speedKmh,
             )
         )
     }
@@ -399,6 +417,21 @@ class TaskRepository(
      */
     suspend fun pendingPushableEvents(limit: Int = Int.MAX_VALUE): List<EventEntity> =
         eventDao.getPending(limit)
+
+    override suspend fun pendingTelemetry(limit: Int) =
+        diagnosticDao.pending(limit)
+
+    suspend fun countPendingTelemetry(): Int =
+        diagnosticDao.countPending()
+
+    fun observePendingTelemetryCount(): Flow<Int> =
+        diagnosticDao.observePendingCount()
+
+    override suspend fun markTelemetryUploaded(id: Long) =
+        diagnosticDao.markPushed(id)
+
+    override suspend fun markTelemetryRejected(id: Long) =
+        diagnosticDao.markRejected(id)
 
     /** Marks an event as successfully uploaded. */
     suspend fun markEventUploaded(eventId: Long) {

@@ -10,6 +10,7 @@ import com.klk.hams.data.db.AppDatabase
 import com.klk.hams.data.db.MIGRATION_1_2
 import com.klk.hams.data.db.MIGRATION_2_3
 import com.klk.hams.data.db.MIGRATION_3_4
+import com.klk.hams.data.db.MIGRATION_4_5
 import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
 import com.klk.hams.provisioning.ProvisioningStore
@@ -27,7 +28,7 @@ class HamsApp : Application() {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(applicationContext, AppDatabase::class.java, "hams.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
     }
 
@@ -79,13 +80,29 @@ class HamsApp : Application() {
             }
         }
 
+        // Boot detection fallback: BootReceiver (ACTION_BOOT_COMPLETED) is
+        // unreliable when the app was force-stopped/swipe-killed (stopped state)
+        // or when an OEM ROM blocks boot broadcasts. The first app run of a new
+        // boot session records the boot the receiver missed; deduped by boot
+        // instant so a real boot is logged exactly once regardless of which path
+        // fires.
+        applicationScope.launch {
+            try {
+                com.klk.hams.diagnostics.BootReceiver.recordBootIfNew(applicationContext)
+            } catch (t: Throwable) {
+                Log.w("HAMS_PUSH", "onCreate: boot fallback failed: $t", t)
+            }
+        }
+
         // Spec §18: closes the post-force-stop / fresh-launch gap.
         // Force-stop wipes WorkManager's queue but not SQLite; if pending rows
         // exist, re-arm auto-push so it fires when validated Wi-Fi appears.
         applicationScope.launch {
-            val pending = repository.observePendingTaskCount().first()
+            val pendingTasks = repository.observePendingTaskCount().first()
+            val pendingTelemetry = repository.countPendingTelemetry()
+            val pending = pendingTasks + pendingTelemetry
             if (shouldAutoPush(isProvisioned = provisioningStore.isProvisioned(), pending = pending)) {
-                Log.d("HAMS_PUSH", "onCreate: $pending pending task(s) found; enqueuing auto-push")
+                Log.d("HAMS_PUSH", "onCreate: $pending pending item(s) found; enqueuing auto-push")
                 pushController.enqueueAuto()
                 // NOTE: do NOT start HamsForegroundService here. Application.onCreate
                 // runs during process bootstrap with no foreground Activity. Starting

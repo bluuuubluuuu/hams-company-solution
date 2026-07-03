@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import com.klk.hams.data.model.DiagnosticEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DiagnosticDao {
@@ -12,7 +13,22 @@ interface DiagnosticDao {
     @Query("SELECT * FROM diagnostics ORDER BY id DESC LIMIT :limit")
     suspend fun recent(limit: Int = 100): List<DiagnosticEntity>
 
-    // Retention sweep (Req 4a) — deletes diagnostics rows older than the
+    @Query("SELECT * FROM diagnostics WHERE pushed = 0 ORDER BY timestamp ASC, id ASC LIMIT :limit")
+    suspend fun pending(limit: Int = Int.MAX_VALUE): List<DiagnosticEntity>
+
+    @Query("SELECT COUNT(*) FROM diagnostics WHERE pushed = 0")
+    suspend fun countPending(): Int
+
+    @Query("SELECT COUNT(*) FROM diagnostics WHERE pushed = 0")
+    fun observePendingCount(): Flow<Int>
+
+    @Query("UPDATE diagnostics SET pushed = 1 WHERE id = :id")
+    suspend fun markPushed(id: Long)
+
+    @Query("UPDATE diagnostics SET pushed = 2 WHERE id = :id")
+    suspend fun markRejected(id: Long)
+
+    // Retention sweep (Req 4a) deletes diagnostics rows older than the
     // configured cutoff. screen_on/off fire frequently, so this table grows
     // unbounded without it. No FK, nothing cascades.
     @Query("DELETE FROM diagnostics WHERE created_at < :cutoffIso")

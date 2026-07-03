@@ -56,6 +56,10 @@ class PushController(
     private val _manualPushActive = MutableStateFlow(false)
     private var manualBudgetJob: Job? = null
 
+    // User-facing "pending" = task/cut backlog ONLY. Telemetry (boot/screen/gps/...)
+    // must NOT inflate the corner badge or the "waiting for Wi-Fi" count. Telemetry
+    // still gets pushed - its triggers (HamsApp recovery's direct countPendingTelemetry,
+    // WifiPushMonitor, PushWorker's hasTelemetry drain) do not depend on this flow.
     val pendingCountFlow: StateFlow<Int> =
         repository.observePendingTaskCount().stateIn(scope, SharingStarted.Eagerly, 0)
 

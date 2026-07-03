@@ -255,7 +255,7 @@ Every data frame carries these named params. Naming is descriptive (HAMS-specifi
 |---|---|---|---|---|
 | `ffb_cut` | 1 (int) | `1` = + press, `0` = every other event | Derived from `event_code` by the frame builder | Core cut signal. V6 report filters on this. |
 | `battery` | 2 (double) | `0.0`–`100.0` | `BatteryManager.getIntProperty(BATTERY_PROPERTY_CAPACITY)` at capture moment | Phone battery percent, for supervisor dashboard |
-| `event_code` | 1 (int) | `179`, `180`, or `35` only for outbound frames | From approved outbound policy | Wialon/reporting semantic label. Only validated values are approved: 179 plus, 180 productive minus/correction, 35 periodic beacon. Do not push HAMS-private lifecycle/health codes as `event_code`. |
+| `event_code` | 1 (int) | task frames: `179`, `180`, `35`; diagnostics telemetry: final Option B codes | From approved outbound policy | Wialon/reporting semantic label. Task-event frames stay limited to 179 plus, 180 productive minus/correction, and 35 periodic beacon. Diagnostics telemetry uses its own final device + Wialon verified Option B code set. |
 | `work_count` | 1 (int) | `0`, `1`, `2`, … | Current displayed/net task count after the event (`plus_count - minus_count`) | Resets to 0 on new task |
 
 #### event_code values
@@ -265,6 +265,13 @@ Canonical policy is maintained in `docs/HAMS_EVENT_CODE_DICTIONARY.md`. Summary:
 - **179** — FFB cut / plus, verified against existing Ladang Landak Wialon notification rules
 - **180** — FFB correction / productive minus, verified against existing Ladang Landak Wialon notification rules
 - **35** — periodic beacon (P99L PDF § 1.3 calls this "Track By Time Interval"; HAMS code/UI labels it "heartbeat"). Configurable interval, default 10 min.
+
+Diagnostics telemetry Option B codes (FINAL, 2026-07-02): **29** boot, **40**
+shutdown, **24** gps_lost, **25** gps_recovery, **41** stop_moving, **42**
+start_moving, **26** screen_off, **27** screen_on, **43** power_connected, and
+**44** power_disconnected. These are device + Wialon verified and are pushed
+from the separate `diagnostics` / `TelemetryPushEngine` path, not from
+task-event push eligibility.
 
 Source still references older HAMS-custom values (`279`, `280`, `281`, `283`,
 `284`, `291`, `292`, `293`) from the first Phase 2 design — they exist as
@@ -500,10 +507,10 @@ These decisions were made during API testing (V6 checkpoint, 2026-04-23) and are
 | 5 | Minus press | Local only, never pushed | **Push 180 only if `work_count > 0` after decrement** | V6 D12 — balances supervisor visibility with data cleanliness |
 | 6 | New task event (281) | — | **Local SQLite only, never pushed** | V6 D14 — empty task boundaries add no report value |
 | 7 | Battery reporting | Local display only | **`battery` param on every pushed event** | V6 adds supervisor battery visibility (vendor requirement) |
-| 8 | Battery threshold alerts | — | **Local edge state only for now; no custom Wialon event_code** | Battery still rides every pushed 179/180/35 message |
+| 8 | Battery threshold alerts | — | **Local edge state only for now; no custom Wialon event_code** | Battery rides task frames and approved diagnostics telemetry frames |
 | 9 | Heartbeat | — | **Event 35, default 10-min interval, configurable 5–60 min** | V6 D16 — battery visibility during idle periods |
 | 10 | Work counter | Not sent | **`work_count` param on every pushed event** | V6 — carries the current displayed/net task count |
-| 11 | event_code | Not possible | **Outbound-approved values only: 179, 180, 35** | HAMS-local codes are not Wialon reporting codes unless admin config is added |
+| 11 | event_code | Not possible | **Task frames: 179, 180, 35; diagnostics telemetry: final Option B** | HAMS-local legacy codes remain non-outbound; Option B telemetry codes are device + Wialon verified |
 | 12 | Coordinate format | DDMM.MMMM | **Unchanged** | Proven correct in V5 |
 | 13 | Batch size | 10 msgs/session, 75ms delay | **Unchanged** | Proven safe in V5 |
 | 14 | Wialon host/port | `185.213.1.24:20332` | **Unchanged** | — |
@@ -529,7 +536,7 @@ These decisions were made during API testing (V6 checkpoint, 2026-04-23) and are
 | F7 | Speed/distance defaults silently drop messages | Missing data in production | Must set both to 0 on ALL production units (admin action) |
 | F11 | New V6 report template needs building | Reports won't match V6 data until template exists | Admin action — build `HAMS_FFB_Cut_Count_V6` |
 | D10 | V6 approach decision | Proceed with V6; route questions to KC | Resolved |
-| D11 | event_code routing during dev vs prod | Risk of firing production alerts on test data | **Reopened by v1.2 policy** — preferred strategy is isolated test units/resources using 179/180; 279/280 are not approved outbound values unless explicitly re-approved |
+| D11 | event_code routing during dev vs prod | Risk of firing production alerts on test data | **Resolved for diagnostics telemetry 2026-07-02** — task frames still use isolated test units/resources for 179/180; diagnostics telemetry Option B codes are final and 279/280 remain non-outbound unless explicitly re-approved |
 | Known V6 trade-off | Self-cancelling +/− pairs create small over-count in Wialon reports (+press pushes before − cancels it) | ~2% inflation in edge cases | Accepted — SQLite stays truthful; reports slightly inflated when workers self-correct |
 | D-future | Per-unit IPS passwords | Security hardening for production | Deferred to Phase 3/4. Current `NA` password works. |
 
@@ -585,10 +592,10 @@ Codex should NOT:
 - Course field: fixed value 1 → real GPS heading (typically 0 for stationary)
 
 #### New pushed data
-- Phone battery (`battery`) — every pushed 179/180/35 message
-- Approved Wialon semantic code (`event_code`) — only 179, 180, or 35
-- Current displayed/net task count (`work_count`) — every pushed 179/180/35 message
-- Horizontal DOP (`hdop`) — every pushed 179/180/35 message
+- Phone battery (`battery`) — every pushed task frame and diagnostics telemetry frame
+- Approved Wialon semantic code (`event_code`) — task frames use 179/180/35; diagnostics telemetry uses final Option B codes **29/40/24/25/41/42/26/27/43/44**
+- Current displayed/net task count (`work_count`) — every pushed task frame; telemetry frames use `0`
+- Horizontal DOP (`hdop`) — every pushed frame when a GPS snapshot is available
 
 #### New event/local-state types
 - Minus press (180) — pushed only when productive
@@ -601,7 +608,7 @@ Codex should NOT:
 #### Wialon side
 - Sensor `FFB_CUT` parameter: `course` → `ffb_cut`
 - New sensor `battery_pct` reading param `battery`
-- Optional new sensors `work_count`, `event_code` (event_code calibration only for 179/180/35)
+- Optional new sensors `work_count`, `event_code` (event_code calibration should include task codes 179/180/35 plus final diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** when telemetry reporting is enabled)
 - Report template filter: `course=1` → `ffb_cut=1`
 - Report template columns: +Battery, +Event code
 
@@ -629,7 +636,7 @@ When transitioning from V5 to V6 app code:
 2. Rebuild the `#D#` frame builder to 16-field form with params block
 3. Add BatteryManager read in the event capture path
 4. Add work_count tracker — current displayed/net task count, reset on new task
-5. Keep local event capture for app lifecycle/health, but restrict outbound push eligibility to 179/180/35
+5. Keep task-event outbound push eligibility restricted to 179/180/35, and route final diagnostics telemetry Option B codes through the separate `diagnostics` table / telemetry frame path
 6. Update push engine to read and emit the new params; `IPSFrameBuilder` derives `ffb_cut` from approved outbound `event_code`
 7. Unit-test the frame builder against the canonical example in §3.6
 8. Integration test: push 3 frames with known params → fetch via `messages/load_interval` with `flagsMask:65281` → assert all params land in `p` block
@@ -643,11 +650,11 @@ Before V6 app is deployed to a production unit:
 3. Build new report template — `HAMS_FFB_Cut_Count_V6`, filter `ffb_cut=1`, columns as specified in §5.5
 4. Record the new template ID — update §5.5 and N8N workflow config once known
 5. Verify with test unit — trigger an app + press, confirm it shows in the new template
-6. (Optional) Create `work_count` and `event_code` sensors if supervisor UI benefits; event_code calibration should include only 179/180/35 unless Wialon admin adds new server-side meanings
+6. (Optional) Create `work_count` and `event_code` sensors if supervisor UI benefits; event_code calibration should include task codes 179/180/35 plus final diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** when telemetry reporting is enabled
 
 Do NOT apply these changes to the test unit in parallel with V5 app testing — each unit should be on one version at a time to avoid sensor read ambiguity.
 
 ---
 
-*Last updated: 2026-04-30 | Maintained by: WYH | Version: V6 event-code policy v1.2*
+*Last updated: 2026-07-02 | Maintained by: WYH | Version: V6 event-code policy v1.3 + diagnostics telemetry Option B*
 *Read alongside: CLAUDE.md, docs/HAMS_EVENT_CODE_DICTIONARY.md, docs/checkpoints/HAMS_API_TESTING.md, docs/HAMS_APP_REQUIREMENTS.md*
