@@ -87,10 +87,17 @@ Wialon account lives on a different Wialon server.
 
 > ## ⚠️ Know this before you rely on it: the dev tunnel is temporary
 > If you expose n8n with a `cloudflared` **quick tunnel**, its hostname is **random and dies on every
-> restart/sleep** — which silently breaks pairing on every installed phone (*"no connection"*). You
-> then have to renew the tunnel, update `local.properties`, and rebuild. Full alert + the renew steps
-> + how to switch to a **permanent** URL (ngrok static / named Cloudflare tunnel / cloud host) are in
-> **[SETUP.md §4](SETUP.md)**. For any real deployment, use a fixed URL so you never rebuild for this.
+> restart/sleep** — which silently breaks pairing on every installed phone (*"no connection"*).
+>
+> Because the tunnel URL is **compiled into the app**, renewing it is not just an edit — **every
+> renewal forces you to update `local.properties`, rebuild, and reinstall on each phone by cable/adb.**
+> There is no over-the-air way to re-point an installed phone at a new quick-tunnel URL. One phone is a
+> chore; a fleet is unworkable — so **quick tunnels are for bench testing only.**
+>
+> **For any real deployment, use a fixed URL** (ngrok static domain / named Cloudflare tunnel / n8n on
+> a cloud host): bake it in **once**, and installed phones keep pairing forever across reboots — no
+> replug, no rebuild. Full alert, the renew steps, and the stable-URL setup are in
+> **[SETUP.md §4](SETUP.md)**.
 
 ---
 

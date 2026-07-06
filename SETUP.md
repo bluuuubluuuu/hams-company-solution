@@ -151,6 +151,10 @@ reinstall: `.\gradlew.bat :app:installDebug`.
 >    ```
 >    .\gradlew.bat :app:installDebug
 >    ```
+>    ⚠️ This means each device must be **physically reconnected** to the build PC (USB with debugging
+>    on, or `adb connect <phone-ip>` over Wi-Fi) for every renewal. There is **no over-the-air** way to
+>    change the URL on a quick tunnel — the app can't reach a URL it wasn't built with. One phone is a
+>    minor chore; a fleet is not. That alone is the reason to move to a **stable URL** (next section).
 > 4. Re-pair if needed. Nothing changes in n8n — it doesn't know about the tunnel.
 >
 > ### Stop the pain — use a *stable* URL for real deployment
