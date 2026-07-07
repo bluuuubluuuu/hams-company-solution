@@ -7,6 +7,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.file.Files
+import java.nio.file.Paths
 
 class PairingScreenTest {
     @Test fun bind_failures_map_to_messages() {
@@ -43,5 +45,29 @@ class PairingScreenTest {
         assertEquals(60, state.remainingSeconds(now))
         assertEquals(1, state.remainingSeconds(now + 59_001L))
         assertFalse(state.isLocked(now + 60_000L))
+    }
+
+    @Test fun pairing_screen_accepts_and_renders_revocation_notice() {
+        val source = sourceText("src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt")
+
+        assertTrue(source.contains("notice: String? = null"))
+        assertTrue(source.contains("text = notice"))
+    }
+
+    @Test fun main_activity_observes_and_clears_revocation() {
+        val source = sourceText("src/main/java/com/klk/hams/MainActivity.kt")
+
+        assertTrue(source.contains("provisioningRevocation.collectAsState()"))
+        assertTrue(source.contains("app.provisioningRevocation.value = null"))
+    }
+
+    private fun sourceText(modulePath: String): String {
+        val moduleFile = Paths.get(modulePath)
+        val rootFile = Paths.get("app").resolve(modulePath)
+        val path = when {
+            Files.exists(moduleFile) -> moduleFile
+            else -> rootFile
+        }
+        return String(Files.readAllBytes(path))
     }
 }

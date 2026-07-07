@@ -14,7 +14,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,13 +47,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             HAMSTaskRecorderTheme {
+                val app = application as HamsApp
+                val revocation by app.provisioningRevocation.collectAsState()
                 var provisioned by remember {
                     mutableStateOf(
                         ProvisioningStore.fromContext(this@MainActivity).isProvisioned()
                     )
                 }
+                LaunchedEffect(revocation) {
+                    if (revocation != null) provisioned = false
+                }
                 if (!provisioned) {
-                    PairingScreen(onPaired = { provisioned = true })
+                    PairingScreen(
+                        notice = revocation,
+                        onPaired = {
+                            app.provisioningRevocation.value = null
+                            provisioned = true
+                        }
+                    )
                 } else {
                     var showOnboarding by remember {
                         mutableStateOf(!batteryOnboardingShown() && !isBatteryExempt())

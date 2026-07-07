@@ -1,6 +1,7 @@
 package com.klk.hams.ui.onboarding
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,6 +80,7 @@ private sealed interface PairingAdminAction {
 fun PairingScreen(
     onPaired: () -> Unit,
     client: ProvisioningClient = ProvisioningClient(),
+    notice: String? = null,
 ) {
     val context = LocalContext.current
     val store = remember { ProvisioningStore.fromContext(context) }
@@ -121,6 +124,21 @@ fun PairingScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            if (notice != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                ) {
+                    Text(
+                        text = notice,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
             Text(
                 "HAMS",
                 fontFamily = FontFamily.Monospace,
