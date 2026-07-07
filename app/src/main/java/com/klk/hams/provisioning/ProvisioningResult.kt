@@ -21,3 +21,11 @@ sealed interface ReleaseResult {
     data object AdminNotConfigured : ReleaseResult
     data class Error(val reason: String) : ReleaseResult
 }
+
+/** Outcome of a /verify (binding re-check) call. */
+sealed interface VerifyResult {
+    data object Bound : VerifyResult
+    data object Released : VerifyResult
+    data object BoundOther : VerifyResult
+    data class Keep(val reason: String) : VerifyResult
+}

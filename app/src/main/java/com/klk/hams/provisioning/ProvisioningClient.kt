@@ -11,6 +11,7 @@ class ProvisioningClient(
     private val secret: String = AppConfig.HAMS_CLAIM_SECRET,
     private val manualClaimUrl: String = AppConfig.MANUAL_CLAIM_URL,
     private val releaseUrl: String = AppConfig.RELEASE_URL,
+    private val verifyUrl: String = AppConfig.VERIFY_URL,
     private val connectTimeoutMs: Int = 10_000,
     private val readTimeoutMs: Int = 10_000,
     private val opener: (String) -> HttpURLConnection = {
@@ -31,6 +32,15 @@ class ProvisioningClient(
         val body = """{"unique_id":"${escapeJsonString(uniqueId)}","fingerprint":"${escapeJsonString(fingerprint)}"}"""
         val (code, resp) = post(releaseUrl, body, adminCode)
         parseReleaseResponse(code, resp)
+    }
+
+    /** POST { unique_id, fingerprint } to /verify with the shared-secret header.
+     *  No admin passkey - this is an automatic device-initiated re-check. */
+    suspend fun verify(uniqueId: String, fingerprint: String): VerifyResult = withContext(Dispatchers.IO) {
+        if (uniqueId.isBlank() || fingerprint.isBlank()) return@withContext VerifyResult.Keep("blank input")
+        val body = """{"unique_id":"${escapeJsonString(uniqueId)}","fingerprint":"${escapeJsonString(fingerprint)}"}"""
+        val (code, resp) = post(verifyUrl, body, adminCode = "")
+        parseVerifyResponse(code, resp)
     }
 
     private fun post(url: String, body: String, adminCode: String): Pair<Int, String?> {
@@ -107,6 +117,18 @@ class ProvisioningClient(
             503 -> if (jsonStringField(body, "error") == "admin_not_configured")
                 ReleaseResult.AdminNotConfigured else ReleaseResult.Error("HTTP $code")
             else -> ReleaseResult.Error("HTTP $code")
+        }
+
+        /** Pure: map (HTTP code, body) to a [VerifyResult]. Only explicit
+         *  release/taken statuses trigger action; every other answer is Keep. */
+        fun parseVerifyResponse(code: Int, body: String?): VerifyResult = when (code) {
+            200 -> when (jsonStringField(body, "status")) {
+                "bound" -> VerifyResult.Bound
+                "released" -> VerifyResult.Released
+                "bound_other" -> VerifyResult.BoundOther
+                else -> VerifyResult.Keep(jsonStringField(body, "status") ?: "unknown")
+            }
+            else -> VerifyResult.Keep("http_$code")
         }
     }
 }
