@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import com.klk.hams.push.PushUiState
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -43,6 +44,13 @@ class HamsApp : Application() {
 
     val pushController: com.klk.hams.push.PushController by lazy {
         com.klk.hams.push.PushController(applicationContext, repository)
+    }
+
+    /** null = provisioned/active; non-null = revoked, value is the banner text. */
+    val provisioningRevocation = MutableStateFlow<String?>(null)
+
+    val bindingRevalidator: com.klk.hams.provisioning.BindingRevalidator by lazy {
+        com.klk.hams.provisioning.BindingRevalidator(this)
     }
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

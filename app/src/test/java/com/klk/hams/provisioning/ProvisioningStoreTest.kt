@@ -10,9 +10,14 @@ import org.junit.Test
 class ProvisioningStoreTest {
     private class FakeStore : ProvisioningStore.KeyValueStore {
         val map = mutableMapOf<String, String>()
+        var blockingRemoveCount = 0
         override fun getString(key: String) = map[key]
         override fun putString(key: String, value: String) { map[key] = value }
         override fun remove(key: String) { map.remove(key) }
+        override fun removeBlocking(key: String) {
+            blockingRemoveCount++
+            map.remove(key)
+        }
     }
 
     @Test fun unprovisioned_by_default() {
@@ -56,5 +61,16 @@ class ProvisioningStoreTest {
         val s = ProvisioningStore(store)
         assertFalse(s.isProvisioned())
         assertEquals(AppConfig.DEVICE_UNIQUE_ID, s.resolveUniqueId())
+    }
+
+    @Test fun clearBlocking_removes_saved_unit_with_blocking_store_path() {
+        val store = FakeStore()
+        val s = ProvisioningStore(store)
+        s.save("OC154_H042")
+
+        s.clearBlocking()
+
+        assertFalse(s.isProvisioned())
+        assertEquals(1, store.blockingRemoveCount)
     }
 }

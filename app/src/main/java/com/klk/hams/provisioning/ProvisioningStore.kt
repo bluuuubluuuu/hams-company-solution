@@ -17,6 +17,7 @@ class ProvisioningStore(private val store: KeyValueStore) {
         fun getString(key: String): String?
         fun putString(key: String, value: String)
         fun remove(key: String)
+        fun removeBlocking(key: String)
     }
 
     fun uniqueIdOrNull(): String? = store.getString(KEY_UNIQUE_ID)?.takeIf { it.isNotBlank() }
@@ -29,6 +30,10 @@ class ProvisioningStore(private val store: KeyValueStore) {
 
     fun clear() {
         store.remove(KEY_UNIQUE_ID)
+    }
+
+    fun clearBlocking() {
+        store.removeBlocking(KEY_UNIQUE_ID)
     }
 
     /** Stored id if provisioned, else the BuildConfig fallback for dev/test builds. */
@@ -61,6 +66,10 @@ class ProvisioningStore(private val store: KeyValueStore) {
 
         override fun remove(key: String) {
             prefs.edit().remove(key).apply()
+        }
+
+        override fun removeBlocking(key: String) {
+            prefs.edit().remove(key).commit()
         }
     }
 }
