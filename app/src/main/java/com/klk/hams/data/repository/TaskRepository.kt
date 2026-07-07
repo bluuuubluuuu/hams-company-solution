@@ -39,15 +39,16 @@ class TaskRepository(
         batteryPct: Double?,
         snapshot: LocationSnapshot? = null,
         timestampIso: String? = null,
-    ) {
+        pushed: Int = 0,
+    ): Long {
         val now = clock.nowUtcIso()
-        diagnosticDao.insert(
+        return diagnosticDao.insert(
             com.klk.hams.data.model.DiagnosticEntity(
                 type = type.wire,
                 timestamp = timestampIso ?: now,
                 batteryPct = batteryPct,
                 createdAt = now,
-                pushed = 0,
+                pushed = pushed,
                 latDecimal = snapshot?.latDecimal,
                 lonDecimal = snapshot?.lonDecimal,
                 hdop = snapshot?.hdop,
@@ -432,6 +433,9 @@ class TaskRepository(
 
     override suspend fun markTelemetryRejected(id: Long) =
         diagnosticDao.markRejected(id)
+
+    suspend fun diagnosticPushedState(id: Long): Int? =
+        diagnosticDao.pushedState(id)
 
     /** Marks an event as successfully uploaded. */
     suspend fun markEventUploaded(eventId: Long) {

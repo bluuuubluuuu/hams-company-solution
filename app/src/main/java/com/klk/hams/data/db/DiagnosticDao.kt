@@ -22,6 +22,9 @@ interface DiagnosticDao {
     @Query("SELECT COUNT(*) FROM diagnostics WHERE pushed = 0")
     fun observePendingCount(): Flow<Int>
 
+    @Query("SELECT pushed FROM diagnostics WHERE id = :id")
+    suspend fun pushedState(id: Long): Int?
+
     @Query("UPDATE diagnostics SET pushed = 1 WHERE id = :id")
     suspend fun markPushed(id: Long)
 
