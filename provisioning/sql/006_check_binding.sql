@@ -25,19 +25,20 @@ AS $$
 DECLARE
     v_owner   text;
     v_claimed boolean;
-    v_found   boolean := false;
 BEGIN
     IF p_fingerprint IS NULL OR p_fingerprint = '' OR p_unique_id IS NULL OR p_unique_id = '' THEN
         RETURN jsonb_build_object('status', 'bad_request');
     END IF;
 
-    SELECT device_fingerprint, claimed, true
-      INTO v_owner, v_claimed, v_found
+    -- Use plpgsql's built-in FOUND: a manual "true INTO v_found" flag is nulled
+    -- out when SELECT INTO matches no row, breaking the not_found check.
+    SELECT device_fingerprint, claimed
+      INTO v_owner, v_claimed
       FROM units
      WHERE unique_id = p_unique_id
      LIMIT 1;
 
-    IF NOT v_found THEN
+    IF NOT FOUND THEN
         RETURN jsonb_build_object('status', 'not_found');
     END IF;
 
