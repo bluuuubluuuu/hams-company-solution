@@ -99,8 +99,11 @@ class PushWorker(
                     senderFactory = senderFactory,
                 ).run()
                 Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
+                // Telemetry-only branch: pendingBeforeCount == 0, so there were no
+                // task cuts to flush -> allCutsFlushed is trivially true here.
                 if (BindingRevalidator.shouldRevokeAfterFlush(
                         releasedFlush,
+                        allCutsFlushed = true,
                         releasedRowId?.let { repo.diagnosticPushedState(it) },
                     )
                 ) {
@@ -271,8 +274,12 @@ class PushWorker(
                 senderFactory = senderFactory,
             ).run()
             Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
+            // Revoke only when the WHOLE flush landed: every pending cut uploaded
+            // (pendingAfter == 0) AND the 301 marker acked. Otherwise stay bound so
+            // the leftover cuts retry on the next run instead of being stranded.
             if (BindingRevalidator.shouldRevokeAfterFlush(
                     releasedFlush,
+                    allCutsFlushed = pendingAfter == 0,
                     releasedRowId?.let { repo.diagnosticPushedState(it) },
                 )
             ) {

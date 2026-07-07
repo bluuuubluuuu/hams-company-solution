@@ -59,9 +59,13 @@ class BindingRevalidator(
             VerifyResult.BoundOther -> BindingDecision.BOUND_OTHER
         }
 
-        /** Revoke after a released-flush only when the 301 row is confirmed pushed. */
-        fun shouldRevokeAfterFlush(releasedFlush: Boolean, row301Pushed: Int?): Boolean =
-            releasedFlush && row301Pushed == 1
+        /** Revoke after a released-flush only when EVERYTHING flushed: all pending
+         *  task cuts uploaded (allCutsFlushed) AND the 301 marker confirmed pushed.
+         *  Guarding on both prevents logging out — and stranding the cuts on the
+         *  now-unprovisioned phone — when the task push failed but the 301 slipped
+         *  through on a recovered connection. */
+        fun shouldRevokeAfterFlush(releasedFlush: Boolean, allCutsFlushed: Boolean, row301Pushed: Int?): Boolean =
+            releasedFlush && allCutsFlushed && row301Pushed == 1
 
         fun readBatteryPct(context: Context): Double? {
             val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return null

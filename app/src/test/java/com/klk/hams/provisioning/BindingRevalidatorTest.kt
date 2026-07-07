@@ -22,10 +22,15 @@ class BindingRevalidatorTest {
         assertEquals(BindingDecision.BOUND_OTHER, BindingRevalidator.decide(VerifyResult.BoundOther))
     }
 
-    @Test fun released_flush_revokes_only_after_301_uploaded() {
-        assertTrue(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, row301Pushed = 1))
-        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, row301Pushed = 0))
-        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, row301Pushed = null))
-        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = false, row301Pushed = 1))
+    @Test fun released_flush_revokes_only_when_all_cuts_and_301_uploaded() {
+        // Happy path: cuts flushed AND 301 acked.
+        assertTrue(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, allCutsFlushed = true, row301Pushed = 1))
+        // 301 not yet acked -> keep binding.
+        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, allCutsFlushed = true, row301Pushed = 0))
+        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, allCutsFlushed = true, row301Pushed = null))
+        // 301 acked but task cuts still pending -> keep binding (no data loss).
+        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = true, allCutsFlushed = false, row301Pushed = 1))
+        // Not a released flush at all.
+        assertFalse(BindingRevalidator.shouldRevokeAfterFlush(releasedFlush = false, allCutsFlushed = true, row301Pushed = 1))
     }
 }
