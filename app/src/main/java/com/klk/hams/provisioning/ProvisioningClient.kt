@@ -100,9 +100,11 @@ class ProvisioningClient(
             401 -> if (jsonStringField(body, "error") == "admin_auth_failed")
                 BindResult.AdminAuthFailed else BindResult.Unauthorized
             404 -> BindResult.NotFound
-            409 -> if (jsonStringField(body, "error") == "already_bound")
-                BindResult.AlreadyBound
-            else BindResult.FingerprintInUse(jsonStringField(body, "on"))
+            409 -> when (jsonStringField(body, "error")) {
+                "already_bound" -> BindResult.AlreadyBound
+                "draining" -> BindResult.Draining
+                else -> BindResult.FingerprintInUse(jsonStringField(body, "on"))
+            }
             503 -> if (jsonStringField(body, "error") == "admin_not_configured")
                 BindResult.AdminNotConfigured else BindResult.Error("HTTP $code")
             else -> BindResult.Error("HTTP $code")

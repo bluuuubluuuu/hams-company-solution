@@ -6,6 +6,7 @@ sealed interface BindResult {
     data object NotFound : BindResult                         // 404 - unknown unique_id
     data class FingerprintInUse(val ownedUnit: String?) : BindResult  // 409 - this device already owns ownedUnit
     data object AlreadyBound : BindResult                     // 409 - target unit owned by another device
+    data object Draining : BindResult                         // 409 - former owner is flushing before release
     data object Unauthorized : BindResult      // 401
     data object AdminAuthFailed : BindResult   // 401 - supervisor code rejected
     data object AdminNotConfigured : BindResult // 503 - backend missing supervisor-code config

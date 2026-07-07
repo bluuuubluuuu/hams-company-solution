@@ -25,6 +25,7 @@ class ProvisioningClientTest {
         assertEquals(BindResult.FingerprintInUse(null), ProvisioningClient.parseManualClaimResponse(409, """{"error":"fingerprint_in_use"}"""))
         assertEquals(BindResult.FingerprintInUse("HAMS_TEST_001"), ProvisioningClient.parseManualClaimResponse(409, """{"error":"fingerprint_in_use","on":"HAMS_TEST_001"}"""))
         assertEquals(BindResult.AlreadyBound, ProvisioningClient.parseManualClaimResponse(409, """{"error":"already_bound"}"""))
+        assertEquals(BindResult.Draining, ProvisioningClient.parseManualClaimResponse(409, """{"error":"draining"}"""))
         assertEquals(BindResult.AdminAuthFailed, ProvisioningClient.parseManualClaimResponse(401, """{"error":"admin_auth_failed"}"""))
         assertEquals(BindResult.Unauthorized, ProvisioningClient.parseManualClaimResponse(401, null))
         assertEquals(BindResult.AdminNotConfigured, ProvisioningClient.parseManualClaimResponse(503, """{"error":"admin_not_configured"}"""))

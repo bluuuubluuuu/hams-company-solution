@@ -14,6 +14,7 @@ class PairingScreenTest {
         assertEquals("This device is already bound to HAMS_TEST_001. Reset pairing first, then bind.", bindFailureMessage(BindResult.FingerprintInUse("HAMS_TEST_001")))
         assertEquals("This device is already bound to another unit. Reset pairing first, then bind.", bindFailureMessage(BindResult.FingerprintInUse(null)))
         assertEquals("That unit is bound to another device. Use the admin dashboard to move it.", bindFailureMessage(BindResult.AlreadyBound))
+        assertEquals("This unit is finishing release from another device. Try again in a few minutes.", bindFailureMessage(BindResult.Draining))
         assertEquals("Setup error (auth). Contact your supervisor.", bindFailureMessage(BindResult.Unauthorized))
         assertEquals("Supervisor code rejected. Check and retry.", bindFailureMessage(BindResult.AdminAuthFailed))
         assertEquals("Supervisor code is not configured. Contact office admin.", bindFailureMessage(BindResult.AdminNotConfigured))

@@ -57,6 +57,7 @@ fun bindFailureMessage(result: BindResult): String? = when (result) {
     is BindResult.FingerprintInUse ->
         "This device is already bound to ${result.ownedUnit ?: "another unit"}. Reset pairing first, then bind."
     BindResult.AlreadyBound -> "That unit is bound to another device. Use the admin dashboard to move it."
+    BindResult.Draining -> "This unit is finishing release from another device. Try again in a few minutes."
     BindResult.Unauthorized -> "Setup error (auth). Contact your supervisor."
     BindResult.AdminAuthFailed -> "Supervisor code rejected. Check and retry."
     BindResult.AdminNotConfigured -> "Supervisor code is not configured. Contact office admin."
