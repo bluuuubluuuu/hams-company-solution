@@ -265,7 +265,13 @@ class HamsForegroundService : Service() {
                     else -> "Recording FFB counts"
                 }
                 val nm = androidx.core.app.NotificationManagerCompat.from(this@HamsForegroundService)
-                runCatching { nm.notify(NOTIFICATION_ID, buildNotification(text)) }
+                // POST_NOTIFICATIONS may be denied on Android 13+; notify then can
+                // throw SecurityException. Swallow it — a missed status update is
+                // harmless. (Explicit catch so lint's MissingPermission is satisfied.)
+                try {
+                    nm.notify(NOTIFICATION_ID, buildNotification(text))
+                } catch (_: SecurityException) {
+                }
             }
         }
     }
