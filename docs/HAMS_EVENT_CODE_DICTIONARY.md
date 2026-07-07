@@ -39,6 +39,29 @@ collision with 179/180/35 or local-only 279/280/281/283/284/291/292/293.
 
 ---
 
+## Provisioning Revalidation Codes (3xx family — 2026-07-07)
+
+Emitted by the app's binding-revalidation gate (launch / before-push / periodic
+`check_binding` against the n8n `verify` webhook). Isolated `3xx` band — no
+collision with any existing family.
+
+| Code | Meaning | Pushed to Wialon? |
+|---|---|---|
+| **301** | `binding_released` — unit was freed by an admin (still unowned). Flushed with pending cuts before logout. | **Yes** (unit is free; safe) |
+| **302** | `binding_taken` — unit reassigned to a different device. | **No — local-only** (pushing would pollute the new owner's unit) |
+
+Rules:
+- The app self-unprovisions only on an explicit `released`/`bound_other`;
+  `not_found` / network failure never wipe a device.
+- On `released`: finalize the active task, flush `179/180/35` + `301` in one
+  session, and log out **only after the whole flush lands** (all cuts uploaded
+  AND `301` acked) — otherwise stay bound so leftover cuts retry (no data loss).
+- On `bound_other`: record `302` locally and log out **without pushing**.
+- A backend drain-lease (`units.drain_until`) blocks a new claim during the
+  flush window (`manual_claim` → status `draining`).
+
+---
+
 ## Purpose
 
 This is the single source of truth for HAMS V2 event codes. It is referenced by:
