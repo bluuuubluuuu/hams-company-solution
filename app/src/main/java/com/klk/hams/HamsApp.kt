@@ -6,6 +6,11 @@ import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
 import androidx.room.Room
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.klk.hams.data.db.AppDatabase
 import com.klk.hams.data.db.MIGRATION_1_2
 import com.klk.hams.data.db.MIGRATION_2_3
@@ -13,6 +18,7 @@ import com.klk.hams.data.db.MIGRATION_3_4
 import com.klk.hams.data.db.MIGRATION_4_5
 import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
+import com.klk.hams.push.BindingCheckWorker
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.shouldAutoPush
 import com.klk.hams.service.HamsForegroundService
@@ -24,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.util.concurrent.TimeUnit
 
 class HamsApp : Application() {
 
@@ -141,6 +148,29 @@ class HamsApp : Application() {
                 pushController.enqueueAuto()
             }
         }
+
+        // Binding revalidation: launch-time one-shot. Released defers flush to
+        // PushWorker; bound_other logs out without pushing.
+        applicationScope.launch {
+            try {
+                if (provisioningStore.isProvisioned()) bindingRevalidator.revalidate()
+            } catch (t: Throwable) {
+                Log.w("HAMS_PUSH", "onCreate: launch binding check failed: $t", t)
+            }
+        }
+
+        // Binding revalidation: periodic, network-connected, unique WorkManager job.
+        val bindingCheck = PeriodicWorkRequestBuilder<BindingCheckWorker>(
+            AppConfig.BINDING_CHECK_INTERVAL_MINUTES,
+            TimeUnit.MINUTES
+        ).setConstraints(
+            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+        ).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            BindingCheckWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            bindingCheck,
+        )
     }
 
     private fun createServiceChannel() {
