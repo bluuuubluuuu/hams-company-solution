@@ -49,6 +49,7 @@ android {
         buildConfigField("String", "HAMS_CLAIM_SECRET", javaStringLiteral(prop("HAMS_CLAIM_SECRET")))
         buildConfigField("String", "MANUAL_CLAIM_URL", javaStringLiteral(prop("MANUAL_CLAIM_URL")))
         buildConfigField("String", "RELEASE_URL",      javaStringLiteral(prop("RELEASE_URL")))
+        buildConfigField("String", "VERIFY_URL",       javaStringLiteral(prop("VERIFY_URL")))
     }
 
     buildTypes {

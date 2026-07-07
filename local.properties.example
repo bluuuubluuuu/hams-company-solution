@@ -20,4 +20,5 @@ DEVICE_UNIQUE_ID=HAMS_TEST_001
 # HAMS_CLAIM_SECRET (x-hams-key) must be the SAME value configured on the n8n side.
 MANUAL_CLAIM_URL=https://<your-n8n-host>/webhook/manual-claim
 RELEASE_URL=https://<your-n8n-host>/webhook/release
+VERIFY_URL=https://<your-n8n-host>/webhook/verify
 HAMS_CLAIM_SECRET=<shared_secret_same_on_app_and_n8n>

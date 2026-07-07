@@ -9,6 +9,9 @@ object AppConfig {
     // Office manual-pairing endpoints (n8n): admin keys in the unit id + supervisor OTP.
     const val MANUAL_CLAIM_URL: String = BuildConfig.MANUAL_CLAIM_URL
     const val RELEASE_URL: String = BuildConfig.RELEASE_URL
+    const val VERIFY_URL: String = BuildConfig.VERIFY_URL
+    /** Periodic binding re-check cadence. WorkManager floor is 15 min. */
+    const val BINDING_CHECK_INTERVAL_MINUTES: Long = 15
 
     const val MAX_COUNT_PER_TASK: Int = 9999
 
