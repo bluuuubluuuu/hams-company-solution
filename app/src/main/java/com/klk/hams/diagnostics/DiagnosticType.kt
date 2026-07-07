@@ -14,7 +14,8 @@ enum class DiagnosticType(val wire: String) {
     GPS_LOST("gps_lost"),
     GPS_RECOVERY("gps_recovery"),
     BINDING_RELEASED("binding_released"),
-    BINDING_TAKEN("binding_taken");
+    DEVICE_BOUND("device_bound"),
+    DEVICE_UNBOUND("device_unbound");
 
     companion object {
         fun fromAction(action: String?): DiagnosticType? = when (action) {

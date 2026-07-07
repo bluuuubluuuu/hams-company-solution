@@ -1,4 +1,4 @@
-# HAMS V2 — Event Code Dictionary
+ bc# HAMS V2 — Event Code Dictionary
 
 **Document Version:** 1.3
 **Last Updated:** 2026-07-02
@@ -48,7 +48,8 @@ collision with any existing family.
 | Code | Meaning | Pushed to Wialon? |
 |---|---|---|
 | **301** | `binding_released` — unit was freed by an admin (still unowned). Flushed with pending cuts before logout. | **Yes** (unit is free; safe) |
-| **302** | `binding_taken` — unit reassigned to a different device. | **No — local-only** (pushing would pollute the new owner's unit) |
+| **303** | `device_bound` — worker paired a device via OTP. Pushed to the just-bound unit at bind time (bind is online). | **Yes** |
+| **304** | `device_unbound` — worker released a device via OTP. Pushed to that unit before the binding clears (unbind is online); marked non-resendable if the gateway is unreachable. | **Yes** |
 
 Rules:
 - The app self-unprovisions only on an explicit `released`/`bound_other`;
@@ -56,7 +57,12 @@ Rules:
 - On `released`: finalize the active task, flush `179/180/35` + `301` in one
   session, and log out **only after the whole flush lands** (all cuts uploaded
   AND `301` acked) — otherwise stay bound so leftover cuts retry (no data loss).
-- On `bound_other`: record `302` locally and log out **without pushing**.
+- On `bound_other`: log out **without pushing** (a message under this unit id
+  would pollute the new owner). The displacement is diagnosable server-side
+  (`check_binding`), not via a pushed code — the old `302 binding_taken` local
+  marker was removed 2026-07-07.
+- `303`/`304` are lifecycle markers pushed inline at OTP bind/unbind — both are
+  inherently online (they just reached the n8n webhook), so the Wialon push lands.
 - A backend drain-lease (`units.drain_until`) blocks a new claim during the
   flush window (`manual_claim` → status `draining`).
 

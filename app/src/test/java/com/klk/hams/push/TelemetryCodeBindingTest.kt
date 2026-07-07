@@ -8,7 +8,15 @@ class TelemetryCodeBindingTest {
         assertEquals(301, TelemetryCode.eventCodeFor("binding_released"))
     }
 
-    @Test fun binding_taken_maps_to_302() {
-        assertEquals(302, TelemetryCode.eventCodeFor("binding_taken"))
+    @Test fun device_bound_maps_to_303() {
+        assertEquals(303, TelemetryCode.eventCodeFor("device_bound"))
+    }
+
+    @Test fun device_unbound_maps_to_304() {
+        assertEquals(304, TelemetryCode.eventCodeFor("device_unbound"))
+    }
+
+    @Test fun removed_binding_taken_has_no_code() {
+        assertEquals(null, TelemetryCode.eventCodeFor("binding_taken"))
     }
 }

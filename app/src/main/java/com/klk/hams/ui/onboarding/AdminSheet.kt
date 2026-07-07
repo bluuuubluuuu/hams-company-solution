@@ -26,8 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.klk.hams.HamsApp
 import com.klk.hams.provisioning.BindResult
 import com.klk.hams.provisioning.ProvisioningClient
+import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
 import com.klk.hams.ui.theme.FieldForest
@@ -57,6 +59,7 @@ fun AdminSheet(
 ) {
     val context = LocalContext.current
     val store = remember { ProvisioningStore.fromContext(context) }
+    val app = remember { context.applicationContext as HamsApp }
     val scope = rememberCoroutineScope()
     var newId by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
@@ -87,7 +90,13 @@ fun AdminSheet(
             busy = true
             scope.launch {
                 when (val release = client.release(id, fp, adminCode)) {
-                    ReleaseResult.Success, ReleaseResult.NotFound -> {
+                    ReleaseResult.Success -> {
+                        // 304 device_unbound: push to Wialon before clearing (unbind is online).
+                        ProvisioningEvents.recordAndPushUnbound(app, id)
+                        store.clear()
+                        onReset()
+                    }
+                    ReleaseResult.NotFound -> {
                         store.clear()
                         onReset()
                     }
@@ -115,6 +124,8 @@ fun AdminSheet(
             when (val r = client.manualClaim(newId, fp, adminCode)) {
                 is BindResult.Success -> {
                     store.save(r.uniqueId)
+                    // 303 device_bound: push to Wialon now (bind is online).
+                    ProvisioningEvents.recordAndPushBound(app, r.uniqueId)
                     status = "Bound to ${r.uniqueId}"
                     adminAction = null
                 }

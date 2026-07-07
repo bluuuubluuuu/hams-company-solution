@@ -64,7 +64,7 @@ class PushWorker(
                     releasedFlush = true
                 }
                 BindingDecision.BOUND_OTHER -> {
-                    revalidator.recordBinding(DiagnosticType.BINDING_TAKEN, pushed = 1)
+                    // Unit taken by another phone: never push (would pollute it).
                     revalidator.revoke(BindingRevalidator.REVOCATION_MESSAGE)
                     Log.d(TAG, "doWork: binding taken by another device; logging out, no push")
                     return Result.success(workDataOf("tasks" to 0))

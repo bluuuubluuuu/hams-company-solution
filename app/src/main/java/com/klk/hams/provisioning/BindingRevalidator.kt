@@ -26,7 +26,9 @@ class BindingRevalidator(
             BindingDecision.PROCEED -> Unit
             BindingDecision.RELEASED_FLUSH -> app.pushController.enqueueAuto()
             BindingDecision.BOUND_OTHER -> {
-                recordBinding(DiagnosticType.BINDING_TAKEN, pushed = 1)
+                // Unit reassigned to another device: stop and log out, push nothing
+                // (a message under this unit id would pollute the new owner). The
+                // displacement is diagnosable server-side (check_binding), not here.
                 revoke(REVOCATION_MESSAGE)
             }
         }

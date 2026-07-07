@@ -19,7 +19,8 @@ object TelemetryCode {
         "power_connected" to 43,
         "power_disconnected" to 44,
         "binding_released" to 301,
-        "binding_taken" to 302,
+        "device_bound" to 303,
+        "device_unbound" to 304,
     )
 
     fun eventCodeFor(type: String): Int? = TABLE[type]

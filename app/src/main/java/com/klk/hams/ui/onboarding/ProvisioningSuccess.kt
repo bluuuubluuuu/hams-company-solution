@@ -13,8 +13,11 @@ suspend fun handleProvisioningSuccess(
     pendingTasks: suspend () -> Int,
     enqueueAuto: () -> Unit,
     onProvisioned: () -> Unit,
+    recordBound: suspend () -> Unit = {},
 ) {
     save(uniqueId)
+    // 303 device_bound: push the bind marker to Wialon now (bind is online).
+    recordBound()
     val pending = pendingTasks()
     if (shouldAutoPush(isProvisioned = true, pending = pending)) {
         enqueueAuto()

@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.klk.hams.HamsApp
 import com.klk.hams.provisioning.BindResult
 import com.klk.hams.provisioning.ProvisioningClient
+import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
 import com.klk.hams.ui.theme.FieldForest
@@ -102,6 +103,7 @@ fun PairingScreen(
             pendingTasks = { app.repository.observePendingTaskCount().first() },
             enqueueAuto = app.pushController::enqueueAuto,
             onProvisioned = onPaired,
+            recordBound = { ProvisioningEvents.recordAndPushBound(app, uniqueId) },
         )
     }
 
@@ -300,7 +302,10 @@ fun PairingScreen(
                         }
                         is PairingAdminAction.ReleaseAndBind -> {
                             when (val release = client.release(action.ownedUnit, fp, code)) {
-                                ReleaseResult.Success -> when (val bind = client.manualClaim(unitId, fp, code)) {
+                                ReleaseResult.Success -> {
+                                    // 304 for the unit we just released, before re-binding.
+                                    ProvisioningEvents.recordAndPushUnbound(app, action.ownedUnit)
+                                    when (val bind = client.manualClaim(unitId, fp, code)) {
                                     is BindResult.Success -> completePairing(bind.uniqueId)
                                     BindResult.AdminAuthFailed -> {
                                         rememberAdminFailure(bindFailureMessage(bind))
@@ -310,6 +315,7 @@ fun PairingScreen(
                                         error = bindFailureMessage(bind)
                                         adminAction = null
                                         busy = false
+                                    }
                                     }
                                 }
                                 ReleaseResult.AdminAuthFailed -> {
