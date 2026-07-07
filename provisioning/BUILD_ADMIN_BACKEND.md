@@ -15,11 +15,52 @@ Reference: `README.md` (runbook), `LOCAL-RUN.md` (bring-up), `CONFIG_REFERENCE.m
 - A Postgres database — Neon (cloud) or a local `postgres:16` container
 - `psql` client
 - `curl` (testing), and `cloudflared` or `adb` (to reach the phone)
+- **n8n ≥ 2.27** (see §0.1 — the form workflows need a recent n8n)
 
 Set a shell var for the DB (never commit it):
 ```
 PROV_DB_URL="postgresql://<user>:<pass>@<host>:5432/neondb"   # Neon needs sslmode=require
 ```
+
+## 0.1 n8n version & node compatibility (read this before importing)
+These workflows were exported from **n8n 2.27.5**. Two things regularly trip up a
+first import on someone else's n8n:
+
+**A) Node version — the "On form submission" error.** The form workflows use the
+**Form Trigger** node **typeVersion 2.6** (and Form / completion **2.5**, Postgres
+**2.6**). On an **older n8n** the imported form node shows:
+> *"Install this node to use it — This node is not currently installed. It is
+> either from a newer version of n8n, a custom node, or has an invalid structure."*
+
+That is **not a config error — your n8n is too old.** Node versions used:
+
+| Node | typeVersion | Used by |
+|---|---|---|
+| `formTrigger` (On form submission) | **2.6** | `generate-otp` |
+| `form` (completion) | **2.5** | `generate-otp` |
+| `postgres` | **2.6** | all |
+| `webhook` | 2.1 | `manual-claim`, `release` |
+| `if` | 2.3 | `manual-claim`, `release` |
+
+Fix — pick one:
+- **Update your n8n** to ≥ 2.27 (recommended) → re-import → everything loads as-is.
+- **Or keep your n8n and rebuild the form node by hand:** delete the broken
+  *On form submission* node, add a **fresh** one from your own node panel (it uses
+  *your* version), set its **Form Title / Description / Fields** to match §4, and
+  reconnect it → Postgres → Form (completion). The **webhook** workflows
+  (`manual-claim`, `release`, `seed`) don't use the form node and import fine on
+  older n8n.
+
+**B) Credentials do NOT import.** n8n strips credentials from exported JSON by
+design. Every imported Postgres node arrives with **no credential attached** (a
+red warning) referencing an id that exists only on the exporter's instance. You
+must **create your own Postgres credential** (§3) and **select it on each Postgres
+node** before the workflow can run. Likewise the `<HAMS_CLAIM_SECRET>` and
+`<WIALON_TOKEN>` placeholders are yours to fill in.
+
+Also make sure the **SQL functions exist in the DB you point at** (§1) — a valid
+credential still errors with *"function issue_otp does not exist"* if the schema
+was never applied.
 
 ## 1. Apply the SQL (functions live in Postgres, not n8n)
 The security/guard/OTP logic is plpgsql so the n8n workflows stay thin.
@@ -113,7 +154,8 @@ Webhooks are **not live until Published**. Open `manual-claim` and `release` →
 - Production URL = `http://localhost:5678/webhook/<path>` (test URL is `/webhook-test/<path>`).
 - The `Respond to Webhook` node only works if the Webhook node's Respond = "Using Respond to Webhook Node".
 - If you imported the JSONs (Path A): set the IF node key to your real `HAMS_CLAIM_SECRET`, select the
-  Postgres credential on each node, then Publish.
+  Postgres credential on each node, then Publish. **If a node shows "install this node" or an empty
+  credential, see §0.1** — that's the n8n-version / credentials-don't-import gotcha, not a bug.
 
 ## 8. Workflow `seed` (pull Wialon units → Postgres) — Manual trigger
 
