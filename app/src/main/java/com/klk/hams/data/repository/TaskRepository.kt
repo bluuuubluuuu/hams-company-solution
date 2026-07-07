@@ -405,6 +405,18 @@ class TaskRepository(
         return savedId
     }
 
+    /** Finalizes the in-progress task so counted cuts can flush before a
+     *  release logout. Non-zero tasks become pending; empty tasks are discarded. */
+    suspend fun finalizeActiveTaskForRelease(): Long? {
+        val now = clock.nowUtcIso()
+        return db.withTransaction {
+            val active = taskDao.getActiveTask() ?: return@withTransaction null
+            val status = if (active.netCount > 0) "pending" else "discarded"
+            taskDao.finalizeTask(active.id, status, now, "auto_released", now)
+            active.id
+        }
+    }
+
     // --- Push flow surface (consumed by Phase 2 PushEngine) ---
 
     /**

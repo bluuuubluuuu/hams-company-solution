@@ -11,6 +11,10 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.klk.hams.AppConfig
 import com.klk.hams.HamsApp
+import com.klk.hams.diagnostics.DiagnosticType
+import com.klk.hams.provisioning.BindingDecision
+import com.klk.hams.provisioning.BindingRevalidator
+import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningStore
 
 /**
@@ -41,8 +45,33 @@ class PushWorker(
             return Result.success(workDataOf("tasks" to 0))
         }
 
+        pushInProgress = true
+        return try {
         val app = applicationContext as HamsApp
         val repo = app.repository
+        val revalidator = app.bindingRevalidator
+        var releasedFlush = false
+        var releasedRowId: Long? = null
+
+        val fingerprint = ProvisioningStore.deviceFingerprint(applicationContext)
+        if (fingerprint != null) {
+            val uniqueId = provisioningStore.resolveUniqueId()
+            when (BindingRevalidator.decide(ProvisioningClient().verify(uniqueId, fingerprint))) {
+                BindingDecision.PROCEED -> Unit
+                BindingDecision.RELEASED_FLUSH -> {
+                    repo.finalizeActiveTaskForRelease()
+                    releasedRowId = revalidator.recordBinding(DiagnosticType.BINDING_RELEASED, pushed = 0)
+                    releasedFlush = true
+                }
+                BindingDecision.BOUND_OTHER -> {
+                    revalidator.recordBinding(DiagnosticType.BINDING_TAKEN, pushed = 1)
+                    revalidator.revoke(BindingRevalidator.REVOCATION_MESSAGE)
+                    Log.d(TAG, "doWork: binding taken by another device; logging out, no push")
+                    return Result.success(workDataOf("tasks" to 0))
+                }
+            }
+        }
+
         val pendingTaskIdsBefore = repo.pendingTasks().map { it.id }
         val pendingBeforeCount = pendingTaskIdsBefore.size
         val hasTelemetry = repo.countPendingTelemetry() > 0
@@ -70,6 +99,14 @@ class PushWorker(
                     senderFactory = senderFactory,
                 ).run()
                 Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
+                if (BindingRevalidator.shouldRevokeAfterFlush(
+                        releasedFlush,
+                        releasedRowId?.let { repo.diagnosticPushedState(it) },
+                    )
+                ) {
+                    revalidator.revoke(BindingRevalidator.REVOCATION_MESSAGE)
+                    Log.d(TAG, "doWork: released binding flushed; logging out")
+                }
                 when (telemetryState) {
                     is PushState.Success -> Result.success(workDataOf("tasks" to 0))
                     is PushState.Partial -> Result.success(workDataOf("tasks" to 0))
@@ -234,6 +271,14 @@ class PushWorker(
                 senderFactory = senderFactory,
             ).run()
             Log.d(TAG, "doWork: telemetry drain -> $telemetryState")
+            if (BindingRevalidator.shouldRevokeAfterFlush(
+                    releasedFlush,
+                    releasedRowId?.let { repo.diagnosticPushedState(it) },
+                )
+            ) {
+                revalidator.revoke(BindingRevalidator.REVOCATION_MESSAGE)
+                Log.d(TAG, "doWork: released binding flushed; logging out")
+            }
 
             when (result) {
                 is PushState.Success -> Result.success(workDataOf("tasks" to tasksUploadedThisRun))
@@ -245,9 +290,16 @@ class PushWorker(
             Log.w(TAG, "doWork: $t — retrying via WorkManager backoff", t)
             Result.retry()
         }
+        } finally {
+            pushInProgress = false
+        }
     }
 
     companion object {
+        @Volatile
+        @JvmField
+        var pushInProgress: Boolean = false
+
         private const val TAG = "HAMS_PUSH"
     }
 }
