@@ -12,6 +12,8 @@ DECLARE
     v_clash text;
     v_owner text;
     v_found boolean;
+    v_drain_until timestamptz;
+    v_drain_fp text;
 BEGIN
     IF p_fingerprint IS NULL OR p_fingerprint = '' OR p_unique_id IS NULL OR p_unique_id = '' THEN
         RETURN jsonb_build_object('status', 'bad_request');
@@ -39,9 +41,20 @@ BEGIN
         RETURN jsonb_build_object('status', 'already_bound');
     END IF;
 
-    -- Idempotent bind / re-bind to the SAME device.
+    -- Guard C: unit is mid-drain by ANOTHER device (former owner still flushing).
+    -- Refuse the claim until the lease expires; the drainer itself is exempt so
+    -- the same phone can re-pair without waiting (see 007_drain_lease.sql).
+    SELECT drain_until, drain_fingerprint INTO v_drain_until, v_drain_fp FROM units
+     WHERE unique_id = p_unique_id;
+    IF v_drain_until IS NOT NULL AND v_drain_until > now()
+       AND v_drain_fp IS DISTINCT FROM p_fingerprint THEN
+        RETURN jsonb_build_object('status', 'draining');
+    END IF;
+
+    -- Idempotent bind / re-bind to the SAME device. Clears any drain lease.
     UPDATE units SET claimed = true, device_fingerprint = p_fingerprint,
-                     last_seen = now(), updated_at = now()
+                     last_seen = now(), updated_at = now(),
+                     drain_until = NULL, drain_fingerprint = NULL
      WHERE unique_id = p_unique_id;
 
     PERFORM consume_otp(p_otp);  -- single-use, only on success
@@ -65,7 +78,8 @@ BEGIN
         RETURN jsonb_build_object('status', 'admin_auth_failed');
     END IF;
 
-    UPDATE units SET claimed = false, device_fingerprint = NULL, updated_at = now()
+    UPDATE units SET claimed = false, device_fingerprint = NULL, updated_at = now(),
+                     drain_until = NULL, drain_fingerprint = NULL
      WHERE unique_id = p_unique_id AND device_fingerprint = p_fingerprint;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     IF v_rows = 0 THEN
