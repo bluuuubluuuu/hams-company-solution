@@ -1,7 +1,7 @@
  bc# HAMS V2 — Event Code Dictionary
 
-**Document Version:** 1.3
-**Last Updated:** 2026-07-02
+**Document Version:** 1.4
+**Last Updated:** 2026-07-07
 **Status:** Canonical reference for all HAMS V2 event codes
 
 > **Source-of-truth note (v1.2, 2026-04-30):** `event_code` is an outbound
@@ -10,6 +10,45 @@
 > values listed under "Approved outbound Wialon event_code values" and the final
 > diagnostics telemetry Option B section should be sent to Wialon unless KC/Wialon
 > admin deliberately creates matching reports, sensors, or notification rules.
+
+---
+
+## All Event Codes at a Glance (master reference — v1.4, 2026-07-07)
+
+Every code the app knows, grouped. "Pushed?" = sent to Wialon in the `event_code`
+param. Local-only codes live in SQLite for audit/UI and are never pushed.
+
+| Code | Name | Family | Pushed to Wialon? |
+|---|---|---|---|
+| **179** | FFB cut (`+` press) | Counting | **Yes** — always |
+| **180** | FFB correction (`−` press) | Counting | **Yes** — only if `work_count > 0` after decrement |
+| **35** | Heartbeat / periodic beacon | System | **Yes** |
+| **29** | Boot / reboot | Diagnostics (Option B) | **Yes** |
+| **40** | Shutdown | Diagnostics | **Yes** |
+| **24** | GPS lost | Diagnostics | **Yes** |
+| **25** | GPS recovery | Diagnostics | **Yes** |
+| **41** | Stop moving | Diagnostics | **Yes** |
+| **42** | Start moving | Diagnostics | **Yes** |
+| **26** | Screen off | Diagnostics | **Yes** |
+| **27** | Screen on | Diagnostics | **Yes** |
+| **43** | Power connected | Diagnostics | **Yes** |
+| **44** | Power disconnected | Diagnostics | **Yes** |
+| **301** | `binding_released` (admin freed → phone flushes + logs out) | Provisioning (3xx) | **Yes** |
+| **303** | `device_bound` (OTP pair) | Provisioning | **Yes** |
+| **304** | `device_unbound` (OTP release) | Provisioning | **Yes** |
+| **281** | New task created | Local lifecycle | No |
+| **283** | Auto-save on kill (`onTaskRemoved`) | Local lifecycle | No |
+| **284** | Auto-save pre-push | Local lifecycle | No |
+| **291** | Battery warning (<20%) | Local health | No |
+| **292** | Battery critical (<10%) | Local health | No |
+| **293** | GPS degraded (HDOP > 5) | Local health | No |
+| **279** | Plus press (legacy dev) | Local (suspended) | No |
+| **280** | Minus press (legacy dev) | Local (suspended) | No |
+| ~~302~~ | ~~`binding_taken`~~ — **removed 2026-07-07**; `bound_other` now stops + logs out with no push (would pollute the new owner) | — | — |
+
+**Totals:** 16 pushed (`179`/`180`/`35` + 10 Option B + `301`/`303`/`304`) · 8 local-only.
+
+The sections below give the detail, rules, and rationale per family.
 
 ---
 
@@ -460,6 +499,7 @@ behaviour.
 | 1.1 | 2026-04-30 | Added "Verification status per code" tiers (A/B/C). Reworded the Family 1 P99L claim — 179/180 are verified from existing Wialon notification rules, not from P99L firmware codes. Reworded Family 4 code 35 — verified from `Meitreck_p99l_protocol.pdf` § 1.3 as "Track By Time Interval"; HAMS keeps the local "heartbeat" label. No numeric values changed. |
 | 1.2 | 2026-04-30 | Tightened policy: only 179, 180, and 35 are approved outbound Wialon `event_code` values. HAMS-custom codes 279/280/281/283/284/291/292/293 are local/internal unless future Wialon admin configuration gives them reporting meaning. Task 2.4 must be redesigned before commit. |
 | 1.3 | 2026-07-02 | Added final, device + Wialon verified diagnostics telemetry Option B outbound codes: 24, 25, 26, 27, 29, 40, 41, 42, 43, 44. The task-event push path remains limited to 179/180/35; diagnostics telemetry pushes through a separate `diagnostics` table and telemetry frame path. |
+| 1.4 | 2026-07-07 | Added the provisioning 3xx family: `301 binding_released` (admin free → flush + logout), `303 device_bound` and `304 device_unbound` (pushed inline at OTP bind/unbind — both inherently online). Removed `302 binding_taken` (was phone-local only); `bound_other` now stops + logs out with no push, diagnosed server-side. Added the "All Event Codes at a Glance" master table. Field-verified live 2026-07-07 (301/303/304 confirmed in Wialon). |
 
 ---
 
