@@ -64,7 +64,7 @@ reads them at build time; you never edit `.kt` files.
 | **Postgres database** (`PROV_DB_URL`) | Your own Neon project *or* a local `postgres:16` container | `psql`, n8n Postgres credential |
 | **`HAMS_CLAIM_SECRET`** | You invent it (any strong string) — must be identical on app + n8n | `local.properties`, n8n IF node |
 | **n8n owner login** | You create it on first run of n8n | n8n editor |
-| **`MANUAL_CLAIM_URL` / `RELEASE_URL`** | Derived from *your* n8n host/tunnel | `local.properties` |
+| **`MANUAL_CLAIM_URL` / `RELEASE_URL` / `VERIFY_URL`** | Derived from *your* n8n host/tunnel (`/webhook/manual-claim`, `/release`, `/verify`) | `local.properties` |
 
 > 🔴 These are secrets or account-specific. Keep them in `local.properties` (gitignored) or inside
 > n8n. **Never commit them and never put them in a zip you send to others** — share

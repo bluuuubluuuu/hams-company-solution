@@ -22,6 +22,7 @@ Copy `local.properties.example` → `local.properties` and fill in. **Never edit
 | `HAMS_CLAIM_SECRET` | shared `x-hams-key` — **same value on app + n8n IF node** | 🔴 yours (secret) |
 | `DEVICE_UNIQUE_ID` | dev-fallback unit id (ignored once paired), e.g. `HAMS_TEST_001` | 🔴 yours |
 | `MANUAL_CLAIM_URL` / `RELEASE_URL` | `<your n8n base>/webhook/manual-claim` and `/release` | 🔴 yours |
+| `VERIFY_URL` | `<your n8n base>/webhook/verify` — device binding re-check (revalidation). Same n8n base as the two above. | 🔴 yours |
 | `IPS_HOST` / `IPS_PORT` | `185.213.1.24` / `20332` | 🟢 preset |
 
 ## Backend / admin values (not in the APK)

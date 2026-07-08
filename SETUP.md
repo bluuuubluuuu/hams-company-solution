@@ -35,7 +35,7 @@ before starting the section.
    | `WIALON_TOKEN` | your 72-char Wialon API token | 🔴 yours (secret) |
    | `HAMS_CLAIM_SECRET` | any strong string you invent (reused on the n8n side later) | 🔴 yours (secret) |
    | `DEVICE_UNIQUE_ID` | a dev fallback unit id, e.g. `HAMS_TEST_001` (ignored once a phone is paired) | 🔴 yours |
-   | `MANUAL_CLAIM_URL` / `RELEASE_URL` | leave blank for now — set in §5 once your n8n is exposed | 🔴 yours |
+   | `MANUAL_CLAIM_URL` / `RELEASE_URL` / `VERIFY_URL` | leave blank for now — set all three in §5 once your n8n is exposed (`/webhook/manual-claim`, `/release`, `/verify`) | 🔴 yours |
    | `IPS_HOST` / `IPS_PORT` | already `185.213.1.24` / `20332` — leave as-is unless your Wialon account is on another server | 🟢 preset |
 
 > 🔴 **Security:** `local.properties` holds live secrets. It is gitignored — keep it that way. Never
@@ -104,6 +104,7 @@ expose in §5 (`http://localhost:5678`, an `adb reverse` loopback, or a tunnel U
   ```
   MANUAL_CLAIM_URL=http://127.0.0.1:5678/webhook/manual-claim
   RELEASE_URL=http://127.0.0.1:5678/webhook/release
+  VERIFY_URL=http://127.0.0.1:5678/webhook/verify
   ```
 
 - **Untethered (real phone over Wi-Fi/LTE):** front n8n with an HTTPS tunnel:
@@ -114,6 +115,7 @@ expose in §5 (`http://localhost:5678`, an `adb reverse` loopback, or a tunnel U
   ```
   MANUAL_CLAIM_URL=https://<random>.trycloudflare.com/webhook/manual-claim
   RELEASE_URL=https://<random>.trycloudflare.com/webhook/release
+  VERIFY_URL=https://<random>.trycloudflare.com/webhook/verify
   ```
 Make sure `HAMS_CLAIM_SECRET` in `local.properties` equals the value on the n8n IF node, then
 reinstall: `.\gradlew.bat :app:installDebug`.
