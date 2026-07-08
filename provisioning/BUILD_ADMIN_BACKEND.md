@@ -68,8 +68,14 @@ The security/guard/OTP logic is plpgsql so the n8n workflows stay thin.
 psql "$PROV_DB_URL" -f provisioning/sql/001_units.sql          # units table
 psql "$PROV_DB_URL" -f provisioning/sql/003_seed_unit.sql      # seed_unit(uid,name) UPSERT
 psql "$PROV_DB_URL" -f provisioning/sql/004_admin_otp.sql      # admin_otp + issue/valid/consume
-psql "$PROV_DB_URL" -f provisioning/sql/005_manual_provision.sql  # manual_claim, release_unit
+psql "$PROV_DB_URL" -f provisioning/sql/005_manual_provision.sql  # manual_claim, release_unit, drain-lease guard
+psql "$PROV_DB_URL" -f provisioning/sql/007_drain_lease.sql       # units.drain_until/drain_fingerprint (apply before 006)
+psql "$PROV_DB_URL" -f provisioning/sql/006_check_binding.sql     # check_binding(uid,fp) — app revalidation + drain stamp
+psql "$PROV_DB_URL" -f provisioning/sql/008_admin_release.sql     # admin_release(uid) — office force-free
 ```
+> `006/007/008` back the newer features (device binding **revalidation**, the drain
+> lease, and admin force-release). Apply `007` before `006` (006 stamps the lease
+> columns 007 adds). Re-running any file is safe (idempotent `CREATE OR REPLACE`).
 Sanity check (a bad OTP must be rejected, no unit touched):
 ```
 psql "$PROV_DB_URL" -c "SELECT manual_claim('HAMS_TEST_001','fp-x','000000');"
@@ -182,6 +188,17 @@ Manual Trigger
 Click **Test workflow** to run. `seed_unit` UPSERTs the name only — never touches `claimed` /
 `device_fingerprint`, so re-runs are safe. `flags=257` (`0x1`|`0x100`) is the lean flag that exposes
 `items[].uid` (the IPS unique id) + `items[].nm`.
+
+## 8.1 Newer workflows (import the same way)
+Three more workflow JSONs ship in `provisioning/n8n/workflows/` — import + configure them
+exactly like the above (set the Postgres credential; for `verify` also set the `x-hams-key`
+in its IF node; then **Publish**):
+- **`verify`** — `POST /webhook/verify` → `check_binding`. **Required** for the app's binding
+  revalidation; its URL is `VERIFY_URL` in `local.properties`. Guarded by `x-hams-key`, no OTP.
+- **`list-units`** — Manual-trigger read-only dashboard of the `units` registry (who's free /
+  claimed / last seen). Just select the Postgres credential and click **Execute**.
+- **`admin-release`** — login-protected Form to force-free any unit (`admin_release`). Set the
+  Postgres credential + **Basic Auth** on the form node, then Publish.
 
 ## 9. Test the webhooks (curl)
 ```
