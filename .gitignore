@@ -67,3 +67,7 @@ hams.db-wal
 *_logcat.txt
 hams.db*
 $null
+
+# ==== Local-only working directory (never published from this repo) ====
+# Scratch area for work-in-progress that must not ship in this repo.
+_local/
