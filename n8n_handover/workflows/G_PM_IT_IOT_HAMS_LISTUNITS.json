@@ -1,0 +1,95 @@
+{
+  "updatedAt": "2026-07-07T02:52:07.854Z",
+  "createdAt": "2026-07-07T02:52:07.854Z",
+  "id": "mwkSPMdm6uyIbjyE",
+  "name": "G_PM_IT_IOT_HAMS_LISTUNITS",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7b899ac3-fb75-4cbc-9455-fa9375935ac9",
+      "name": "When clicking Execute workflow"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT unique_id, name, claimed, device_fingerprint, status, last_seen AT TIME ZONE 'Asia/Kuala_Lumpur' AS last_seen_myt, drain_until AT TIME ZONE 'Asia/Kuala_Lumpur' AS drain_until_myt, drain_fingerprint, updated_at AT TIME ZONE 'Asia/Kuala_Lumpur' AS updated_at_myt FROM \"G_PM_IT_IOT_HAMS_UNITS\" ORDER BY unique_id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "id": "538b0767-a188-4551-b502-d34074a79876",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Cas1s6GCZh1blzuK",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking Execute workflow": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "9b7b36c9-dcb3-4068-8a30-8bd58ea6aec5",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-07-07T02:52:07.858Z",
+      "createdAt": "2026-07-07T02:52:07.858Z",
+      "role": "workflow:owner",
+      "workflowId": "mwkSPMdm6uyIbjyE",
+      "projectId": "gKvBFdIwESqxvKrx",
+      "project": {
+        "updatedAt": "2026-06-30T06:18:15.383Z",
+        "createdAt": "2026-06-30T06:14:22.331Z",
+        "id": "gKvBFdIwESqxvKrx",
+        "name": "Woo Ying Hui <yhwoo516@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "bacd28f7-2efb-4923-83ec-fc4c1426c82d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

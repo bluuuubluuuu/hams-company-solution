@@ -1,0 +1,147 @@
+{
+  "updatedAt": "2026-07-07T02:54:48.904Z",
+  "createdAt": "2026-07-07T02:52:58.562Z",
+  "id": "qupGTB1033gnCTl5",
+  "name": "G_PM_IT_IOT_HAMS_ADMINRELEASE",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Admin Release Unit",
+        "formDescription": "Force-free a Wialon unit (admin only). The bound phone flushes its cuts + logs out on its next check.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "unit_id",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6058f1a6-a877-4b14-91ef-19d11c4715af",
+      "name": "On form submission",
+      "webhookId": "64c3d588-b8f3-49ab-ade3-b343d4be3b9e",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "NMZWqJhYhvelxxTu",
+          "name": "KLK_hams_admin"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT admin_release($1) AS result;",
+        "options": {
+          "queryReplacement": "={{ $json.unit_id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        0
+      ],
+      "id": "df03497d-f8be-497f-94e6-c8f2687a27fd",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Cas1s6GCZh1blzuK",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Release processed",
+        "completionMessage": "=Result: {{ $json.result.status }} for {{ $json.result.unique_id || $json.unit_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        0
+      ],
+      "id": "204dc329-0a8f-4b09-a6eb-28b8807bb7cf",
+      "name": "Form",
+      "webhookId": "b7a3c9e6-7f83-40a4-d276-17e2d6a0f867"
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "6902b65a-c877-4c2e-8161-44d874f5b72f",
+  "activeVersionId": "6902b65a-c877-4c2e-8161-44d874f5b72f",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-07-07T02:52:58.566Z",
+      "createdAt": "2026-07-07T02:52:58.566Z",
+      "role": "workflow:owner",
+      "workflowId": "qupGTB1033gnCTl5",
+      "projectId": "gKvBFdIwESqxvKrx",
+      "project": {
+        "updatedAt": "2026-06-30T06:18:15.383Z",
+        "createdAt": "2026-06-30T06:14:22.331Z",
+        "id": "gKvBFdIwESqxvKrx",
+        "name": "Woo Ying Hui <yhwoo516@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "bacd28f7-2efb-4923-83ec-fc4c1426c82d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "admin-release_v1",
+    "description": ""
+  }
+}

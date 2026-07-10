@@ -1,0 +1,223 @@
+{
+  "updatedAt": "2026-07-07T02:39:34.481Z",
+  "createdAt": "2026-07-07T02:36:43.192Z",
+  "id": "N8iA5sTUYBQzyC0Z",
+  "name": "G_PM_IT_IOT_HAMS_VERIFY",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "verify",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        96
+      ],
+      "id": "d0565806-ad1d-4fc6-a7a3-08cc5fc89f23",
+      "name": "Webhook",
+      "webhookId": "c7d2e9a1-4f83-4b6c-9e21-7a1b3c5d6e70"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b2e4409c-3d47-4487-821c-ba9496693e01",
+              "leftValue": "={{ $json.headers['x-hams-key'] }}",
+              "rightValue": "<HAMS_CLAIM_SECRET>",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        96
+      ],
+      "id": "b4c05762-1d38-4e9b-9249-47c695b1152e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\":\"unauthorized\"\n}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        192
+      ],
+      "id": "9864d12a-cd95-480e-9521-a04ab97853ab",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT check_binding($1,$2) AS result;",
+        "options": {
+          "queryReplacement": "={{ $json.body.unique_id }}, {{ $json.body.fingerprint }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f67acfbf-32bd-4d09-9b10-2d2372babb5c",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Cas1s6GCZh1blzuK",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $json.result; const s = r.status;\nlet code = 200, body;\nif (s === 'bound') { body = { bound: true, status: s, unique_id: r.unique_id }; }\nelse if (s === 'released' || s === 'bound_other') { body = { bound: false, status: s }; }\nelse if (s === 'not_found') { body = { bound: false, status: s }; }\nelse { body = { bound: false, status: s || 'bad_request' }; }\nreturn [{ json: { code, body } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "344fdcd9-0651-4fdd-9b72-3c63f6bcb5dd",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body }}",
+        "options": {
+          "responseCode": "={{ $json.code }}"
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4affa20b-38f1-40c6-af69-11f88a4e7c88",
+      "name": "Respond to Webhook1"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "8447ce2c-94d3-491b-914e-ca797da96d52",
+  "activeVersionId": "8447ce2c-94d3-491b-914e-ca797da96d52",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "sourceWorkflowId": null,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-07-07T02:36:43.204Z",
+      "createdAt": "2026-07-07T02:36:43.204Z",
+      "role": "workflow:owner",
+      "workflowId": "N8iA5sTUYBQzyC0Z",
+      "projectId": "gKvBFdIwESqxvKrx",
+      "project": {
+        "updatedAt": "2026-06-30T06:18:15.383Z",
+        "createdAt": "2026-06-30T06:14:22.331Z",
+        "id": "gKvBFdIwESqxvKrx",
+        "name": "Woo Ying Hui <yhwoo516@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "bacd28f7-2efb-4923-83ec-fc4c1426c82d"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "verify_v1",
+    "description": ""
+  }
+}
