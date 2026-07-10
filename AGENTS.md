@@ -18,11 +18,12 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 ## Project Identity
 
 **Project:** HAMS Task Recorder - Android Mobile App
-**Repo:** `D:\HAMS_task_recorder`
+**Repo:** `D:\HAMS_company_solution`
 **Version:** V2 (protocol layer at V6)
 **Owner:** KLK (Kuala Lumpur Kepong) - Oil Palm Plantation Operations
 **Developer account:** yhwoo516@gmail.com (Codex Pro)
-**Status:** Post API-testing (V6 validated 2026-04-23). Proceeding to app development.
+**Status:** App feature-complete and field-verified. Live Wialon push proven. Provisioning backend
+(n8n + Postgres) live; binding revalidation shipped 2026-07-07. Handover to company IT in progress.
 
 --
 
@@ -137,6 +138,23 @@ via the n8n `manual-claim` webhook. Release / re-bind is office-only through the
 `local.properties` is only a dev fallback. Cut data still goes phone -> Wialon IPS directly; the
 backend only does identity + admin. Backend: `provisioning/` (SQL functions + importable n8n
 workflow JSONs). Start at `COMPANY_HANDOFF.md`, then `provisioning/README.md` + `LOCAL-RUN.md`.
+
+### Binding revalidation (shipped 2026-07-07, field-verified)
+
+The app re-checks its binding against the registry at launch, before every push, and every ~15 min
+(`BindingCheckWorker`) via the n8n `verify` webhook -> `check_binding()`. Four answers: `bound`
+(proceed), `released` (flush pending cuts + push `301`, then log out), `bound_other` (log out, no
+push), `not_found` (conservative - keep last-known-good, do not wipe). A **drain lease**
+(`units.drain_until` / `drain_fingerprint`, 5-min TTL) blocks other devices from claiming the unit
+while the departing phone flushes. Provisioning event codes: `301 binding_released`,
+`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind). `302` was removed -
+see `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.4. Plan: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`.
+
+Two admin workflows beyond the original four: `list-units` (read-only registry dump) and
+`admin-release` (office force-free a unit without the phone or an OTP).
+
+**Backend is PostgreSQL today, but the engine is not final** - HQ is ruling on Postgres vs SQL
+Server. See `database/` for the review pack and `n8n_handover/` for the company deployment pack.
 
 --
 
@@ -644,27 +662,30 @@ No event row is generated for rollover (no real location/battery snapshot at app
 
 ### Phase 1 - Core offline - **COMPLETE** (manual emulator verification 2026-04-28). See `docs/checkpoints/HAMS_PHASE_0_1.md`.
 
-### Phase 2 - IPS push engine & event capture (Codex)
+### Phase 2 - IPS push engine & event capture - **COMPLETE** (field-verified 2026-05-14)
 
-Tasks 2.1-2.7 complete (CoordinateConverter, V6 16-field IPSFrameBuilder, PushEligibility, TaskRepository push flow, local health/heartbeat capture, WialonIPSClient, PushEngine orchestration + chunking + retry). Task 2.7.5 (GPS streaming + armband UI + DB v2 + daily rollover) implemented 2026-05-05/06; field verification pending. Detailed task breakdown and acceptance criteria in `plans/phase2_ips_push.md`.
+Tasks 2.1-2.8 all complete. 2.1-2.7: `CoordinateConverter`, V6 16-field `IPSFrameBuilder`, `PushEligibility`, `TaskRepository` push flow, local health/heartbeat capture, `WialonIPSClient`, `PushEngine` orchestration + chunking + retry. 2.7.5: GPS streaming + armband UI + DB v2 + daily rollover. 2.8: WorkManager push trigger + manual push button. End-to-end push to Wialon confirmed. See `plans/phase2_ips_push.md` "Implementation log".
 
-Remaining: Task 2.8 - WorkManager-based push trigger + manual push button. Spec approved 2026-05-08 at `docs/superpowers/specs/2026-05-08-push-and-wifi-design.md`. No live transmission until 2.8 lands.
+### Phase 2 acceptance criteria - all met
 
-### Phase 2 acceptance criteria
+- [x] Canonical frame matches byte-for-byte with spec example
+- [x] Task outbound-approved events (`179`, productive `180`, `35`) push and ack with `#AD#1`; diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** push through `TelemetryPushEngine`
+- [x] Local-only codes (`279/280/281/283/284/291/292/293`) never appear in Wialon
+- [x] Wi-Fi disconnect mid-batch triggers retry with backoff, no data loss
+- [x] Pre-push auto-save fires before push when active task has count > 0
 
-- Canonical frame matches byte-for-byte with spec example
-- Task outbound-approved events (`179`, productive `180`, `35`) push and ack with `#AD#1`; diagnostics telemetry Option B codes **29/40/24/25/41/42/26/27/43/44** push through `TelemetryPushEngine`
-- Local-only codes (`279/280/281/283/284/291/292/293`) never appear in Wialon
-- Wi-Fi disconnect mid-batch triggers retry with backoff, no data loss
-- Pre-push auto-save fires before push when active task has count > 0
+### Phase 3 - UI polish - **COMPLETE** (delivered inside Task 2.7.5 + 2.8, not as a discrete phase)
+- [x] Progress / status panel (manual push: `Pending Wi-Fi -> Pushing -> Completed/Failed`) - `CountScreen.kt`
+- [x] Single rolling push notification (Android notification channel) - `PushNotifier.kt`
+- [x] Task cache view showing per-task upload status - `CountScreen.kt`
+- [x] Battery display in main UI header (BATT pill) - `BatteryMonitor.kt` + `CountScreen.kt`
 
-### Phase 3 - UI polish (Codex)
-- [ ] Progress bar (in-app, updates per batch)
-- [ ] Single rolling push notification (Android notification channel)
-- [ ] Task history list (scrollable, shows upload status per task)
-- [ ] Battery display in main UI header
+### Phase 4 - Integration test - live push proven; report-side verification not recorded here
 
-### Phase 4 - Integration test
+Live end-to-end push to Wialon is confirmed (Phase 2.8 field verification 2026-05-14; provisioning
+codes `301`/`303`/`304` confirmed in Wialon 2026-07-07). The geofence/report-template items below
+were never ticked off in this repo - treat them as unverified rather than done.
+
 - [ ] Push to `TEST_HAMS_APP_001` (unit ID: `601602811`)
 - [ ] Push only approved outbound event types: task `179`, productive `180`, `35`, plus diagnostics telemetry Option B **29/40/24/25/41/42/26/27/43/44**; do not push legacy 279/280/281/283/284/291/292/293 unless re-approved with Wialon config
 - [ ] Verify messages in Wialon UI (`https://pro.navi-agnostics.com`)
@@ -739,4 +760,4 @@ Karpathy guidelines plugin installed - apply all four principles (Think Before C
 
 --
 
-*Last updated: 2026-04-28 | Maintained by: WYH | Version: V6*
+*Last updated: 2026-07-10 | Maintained by: WYH | Version: V6*
