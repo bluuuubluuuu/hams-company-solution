@@ -42,4 +42,27 @@ class GpsLockTransitionTest {
     fun firstSample_stale_initialisesSilently() {
         assertNull(detector().onSnapshotAge(9_000, 0))
     }
+
+    /** Cold start: no fix yet -> seeds Stale. The first real lock is an acquisition,
+     *  not a recovery from an outage that never happened. */
+    @Test
+    fun coldStart_firstLock_emitsNothing() {
+        val d = detector()
+        assertNull(d.onSnapshotAge(9_000, 0))             // seed Stale (no fix at service start)
+        assertNull(d.onSnapshotAge(1_000, 1_000))         // first fix — dwell starts
+        assertNull(d.onSnapshotAge(1_000, 30_000))        // held well past dwell
+    }
+
+    /** After a cold start, a genuine loss and recovery must still be reported. */
+    @Test
+    fun coldStart_thenRealLossAndRecovery_emitBoth() {
+        val d = detector()
+        d.onSnapshotAge(9_000, 0)                          // seed Stale
+        d.onSnapshotAge(1_000, 1_000)                      // first fix, silently becomes Locked
+        d.onSnapshotAge(1_000, 30_000)                     // Locked is now the reported state
+        d.onSnapshotAge(9_000, 31_000)                     // real loss begins
+        assertEquals(DiagnosticType.GPS_LOST, d.onSnapshotAge(9_000, 52_000))
+        d.onSnapshotAge(1_000, 53_000)                     // relock begins
+        assertEquals(DiagnosticType.GPS_RECOVERY, d.onSnapshotAge(1_000, 74_000))
+    }
 }
