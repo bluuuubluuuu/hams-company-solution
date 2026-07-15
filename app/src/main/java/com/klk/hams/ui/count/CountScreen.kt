@@ -57,6 +57,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -758,6 +760,23 @@ private fun ActionRow(
     var minusJob by remember { mutableStateOf<Job?>(null) }
     var plusJob by remember { mutableStateOf<Job?>(null) }
 
+    // Field feedback 2026-07-15: a short vibration per recorded press, so a
+    // worker not looking at the screen feels each cut register. Uses the Vibrator
+    // directly (not performHapticFeedback) so it fires even when the device's
+    // touch-vibration system setting is off. Fires once per press and per
+    // auto-repeat tick. minSdk 33 → VibratorManager always available.
+    val context = LocalContext.current
+    val vibrator = remember(context) {
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+    }
+    fun tick() {
+        if (vibrator.hasVibrator()) {
+            vibrator.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+    }
+    val doPlus = { tick(); onPlus() }
+    val doMinus = { tick(); onMinus() }
+
     // Everything below is sized from the actual space this composable is given
     // (BoxWithConstraints), not fixed dp — so the buttons and their glyphs scale
     // across screen sizes/densities instead of overflowing on smaller devices.
@@ -796,12 +815,12 @@ private fun ActionRow(
                     onContainer = if (state.canIncrement) FieldForestOn else FieldSlate,
                     enabled = state.canIncrement,
                     onPressStart = {
-                        onPlus()
+                        doPlus()
                         plusJob?.cancel()
                         plusJob = scope.launch {
                             delay(400)
                             while (isActive) {
-                                onPlus()
+                                doPlus()
                                 delay(200)
                             }
                         }
@@ -822,12 +841,12 @@ private fun ActionRow(
                     onContainer = if (state.canDecrement) FieldEarthOn else FieldSlate,
                     enabled = state.canDecrement,
                     onPressStart = {
-                        onMinus()
+                        doMinus()
                         minusJob?.cancel()
                         minusJob = scope.launch {
                             delay(400)
                             while (isActive) {
-                                onMinus()
+                                doMinus()
                                 delay(200)
                             }
                         }
