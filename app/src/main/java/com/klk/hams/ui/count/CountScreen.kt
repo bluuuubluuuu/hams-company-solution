@@ -400,8 +400,8 @@ private fun PushStatusOverlay(
     data class Action(val label: String, val onClick: () -> Unit)
     val (title, body, action) = when (state) {
         is PushUiState.PendingWifi -> Triple(
-            "Waiting for Wi-Fi",
-            "${state.pendingTasks} task(s) queued. Will push as soon as Wi-Fi connects. " +
+            "Waiting for network",
+            "${state.pendingTasks} task(s) queued. Will push as soon as a network connects. " +
                 "Cancel only closes this view; uploads continue in the background.",
             Action("Cancel", onCancel)
         )

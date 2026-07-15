@@ -259,7 +259,7 @@ class HamsForegroundService : Service() {
             app.pushController.uiStateFlow.collect { state ->
                 val text = when (state) {
                     is com.klk.hams.push.PushUiState.PendingWifi ->
-                        "${state.pendingTasks} task(s) waiting for Wi-Fi"
+                        "${state.pendingTasks} task(s) waiting for network"
                     is com.klk.hams.push.PushUiState.Pushing ->
                         "Uploading task ${(state.done + 1).coerceAtMost(state.total.coerceAtLeast(1))} of ${state.total}"
                     else -> "Recording FFB counts"

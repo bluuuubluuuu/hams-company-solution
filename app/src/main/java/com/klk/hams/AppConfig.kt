@@ -110,6 +110,21 @@ object AppConfig {
     const val PUSH_MANUAL_TIMEOUT_MS: Long = 30L * 60_000L
 
     /**
+     * Whether cut-data push may run on ANY connection (mobile data, tethering,
+     * phone hotspot) — not only unmetered Wi-Fi.
+     *
+     * false (original 2.8 design) = UNMETERED only: never spends the worker's
+     *   mobile data, but a phone with only a hotspot never uploads until it
+     *   reaches office/router Wi-Fi.
+     * true  = CONNECTED: uploads over any network, including a hotspot. Field
+     *   feedback 2026-07-15 — devices on tethering showed a permanent
+     *   "waiting for Wi-Fi" because Android flags a hotspot as metered.
+     *
+     * Binding checks were always CONNECTED; this only changes the push worker.
+     */
+    const val PUSH_ALLOW_METERED: Boolean = true
+
+    /**
      * Backoff schedule between retry attempts during a single push session.
      * Applied while inside the manual-mode 30-minute budget; auto-mode uses
      * WorkManager's own backoff (handled by Result.retry()).

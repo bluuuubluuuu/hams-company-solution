@@ -73,11 +73,16 @@ class PushController(
 
     val manualPushActive: StateFlow<Boolean> = _manualPushActive.asStateFlow()
 
+    // AppConfig.PUSH_ALLOW_METERED (field feedback 2026-07-15): CONNECTED lets
+    // push run over a phone hotspot / mobile data; UNMETERED restricts to Wi-Fi.
+    private fun pushNetworkType(): NetworkType =
+        if (AppConfig.PUSH_ALLOW_METERED) NetworkType.CONNECTED else NetworkType.UNMETERED
+
     fun enqueueAuto() {
         val request = OneTimeWorkRequestBuilder<PushWorker>()
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.UNMETERED)
+                    .setRequiredNetworkType(pushNetworkType())
                     .build()
             )
             .addTag(TAG_AUTO)
@@ -97,7 +102,7 @@ class PushController(
             val request = OneTimeWorkRequestBuilder<PushWorker>()
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.UNMETERED)
+                        .setRequiredNetworkType(pushNetworkType())
                         .build()
                 )
                 .addTag(TAG_MANUAL)
