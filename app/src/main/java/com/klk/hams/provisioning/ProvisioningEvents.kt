@@ -88,6 +88,40 @@ object ProvisioningEvents {
     }
 
     /**
+     * What a completed release sequence reports back.
+     *
+     * @property landed true if the 302/304 marker reached the gateway. Never
+     *   gates the strand; call sites use it to tell the operator whether Wialon
+     *   holds a receipt.
+     * @property lost the counts measured before the strand — what this release
+     *   permanently discarded.
+     */
+    data class ReleaseOutcome(val landed: Boolean, val lost: TaskRepository.UnsentWork)
+
+    /**
+     * The ordered release sequence, expressed over its four steps so it is
+     * testable on the JVM without an Android [HamsApp]. [flushAndRelease] is the
+     * only production caller and passes the real repository/push functions.
+     *
+     * Step 4 runs on every path. The `landed` flag is data returned to the
+     * caller, never a condition on the strand — see [flushAndRelease] for why
+     * that ranking exists, and `ReleaseSequenceTest` for the guard that fails if
+     * anyone re-wraps it in `if (landed)`.
+     */
+    suspend fun runReleaseSequence(
+        finalizeActiveTask: suspend () -> Unit,
+        countUnsentWork: suspend () -> TaskRepository.UnsentWork,
+        pushMarker: suspend (TaskRepository.UnsentWork) -> Boolean,
+        strandUnsentWork: suspend () -> Unit,
+    ): ReleaseOutcome {
+        finalizeActiveTask()
+        val unsent = countUnsentWork()
+        val landed = pushMarker(unsent)
+        strandUnsentWork()
+        return ReleaseOutcome(landed = landed, lost = unsent)
+    }
+
+    /**
      * The complete device-initiated release sequence, shared by every call site
      * so the ordering cannot drift between them:
      *
@@ -113,16 +147,17 @@ object ProvisioningEvents {
      * The ranking this encodes: misfiling harvest onto the wrong worker is worse
      * than losing it.
      *
-     * @return true if the marker reached the gateway. Does not gate the strand;
-     *   callers may use it to report whether a receipt exists.
+     * @return the marker's landed flag plus the counts this release discarded.
+     *   Neither gates the strand; callers use them to report whether a receipt
+     *   exists and how much harvest was destroyed.
      */
-    suspend fun flushAndRelease(app: HamsApp, uniqueId: String): Boolean {
-        app.repository.finalizeActiveTaskForRelease()
-        val unsent = app.repository.countUnsentWork()
-        val landed = recordAndPushRelease(app, uniqueId, unsent)
-        app.repository.strandUnsentWork()
-        return landed
-    }
+    suspend fun flushAndRelease(app: HamsApp, uniqueId: String): ReleaseOutcome =
+        runReleaseSequence(
+            finalizeActiveTask = { app.repository.finalizeActiveTaskForRelease() },
+            countUnsentWork = { app.repository.countUnsentWork() },
+            pushMarker = { unsent -> recordAndPushRelease(app, uniqueId, unsent) },
+            strandUnsentWork = { app.repository.strandUnsentWork() },
+        )
 
     private suspend fun drainTelemetry(app: HamsApp, uniqueId: String) {
         try {
@@ -130,6 +165,12 @@ object ProvisioningEvents {
                 repo = app.repository,
                 senderFactory = { WialonIPSClient(uniqueId = uniqueId) },
             ).run()
+        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+            // Never swallowed with the transport errors below: cancellation means
+            // the caller's scope died mid-release, and silently continuing would
+            // hide a half-finished sequence (the exact failure mode the
+            // application-scoped launch at the UI call sites exists to prevent).
+            throw c
         } catch (_: Throwable) {
             // best-effort at behaviour time; a pending row retries later
         }
