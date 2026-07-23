@@ -147,8 +147,12 @@ The app re-checks its binding against the registry at launch, before every push,
 push), `not_found` (conservative — keep last-known-good, do not wipe). A **drain lease**
 (`units.drain_until` / `drain_fingerprint`, 5-min TTL) blocks other devices from claiming the unit
 while the departing phone flushes. Provisioning event codes: `301 binding_released`,
-`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind). `302` was removed —
-see `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.4. Plan: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`.
+`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind). A device-initiated OTP
+release emits `302 work_stranded` instead of `304` when the phone is leaving with unsent cuts; both
+markers carry `lost_tasks` / `lost_cuts`, and the still-pending event rows are stranded
+(`pushed = 2`) unconditionally so they can never upload under the next unit —
+see `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.5. Plans: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`,
+`docs/superpowers/plans/2026-07-23-work-stranded-302.md`.
 
 Two admin workflows beyond the original four: `list-units` (read-only registry dump) and
 `admin-release` (office force-free a unit without the phone or an OTP).
