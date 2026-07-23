@@ -45,9 +45,13 @@ object ProvisioningEvents {
      * Record + push the release marker to [uniqueId] (the unit being left)
      * BEFORE the caller clears the binding.
      *
-     * Emits 302 `work_stranded` with the leftover counts, or 304
-     * `device_unbound` with `0/0`. Both carry the counts so a clean release is
-     * a positive assertion rather than an absence.
+     * Emits 302 `work_stranded` or 304 `device_unbound`, both carrying the real
+     * `lostTasks` / `lostCuts` counts from [unsent] — a clean release is a
+     * positive assertion rather than an absence. The only guarantee tied to
+     * the marker choice is `lostCuts == 0` on a 304 (that is precisely
+     * [releaseTypeFor]'s routing condition); `lostTasks` may still be
+     * non-zero on a 304, meaning no harvest was lost but a task still holds
+     * an unsent beacon.
      *
      * Every telemetry row that fails to land is marked rejected, not just this
      * one: `drainTelemetry` sends the whole pending table, and any row left
@@ -77,6 +81,9 @@ object ProvisioningEvents {
                 app.repository.markTelemetryRejected(rowId)
             }
         }
+        // Re-read (not the same value as the loop's checks): the loop above may have
+        // just flipped this row to pushed = 2 via markTelemetryRejected, so the state
+        // must be read again here, after rejection, for the returned bool to be correct.
         return app.repository.diagnosticPushedState(id) == 1
     }
 
