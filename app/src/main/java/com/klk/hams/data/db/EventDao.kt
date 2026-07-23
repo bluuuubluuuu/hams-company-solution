@@ -57,4 +57,22 @@ interface EventDao {
         "AND NOT (event_code = 180 AND work_count <= 0)"
     )
     suspend fun countRejectedForTask(taskId: Long): Int
+
+    // --- Release-time leftover accounting (302 work_stranded, 2026-07-23) ---
+
+    // Tasks that still hold unsent rows. Counted over `events`, not `tasks`, so
+    // already-stranded work (pushed = 2) is never re-reported on a later release.
+    @Query("SELECT COUNT(DISTINCT task_id) FROM events WHERE pushed = 0")
+    suspend fun countUnsentTasks(): Int
+
+    // The harvest figure: 179 only. Counting the full pushable set would let
+    // heartbeats dominate (a phone with 6 cuts and 400 beacons would report 406).
+    @Query("SELECT COUNT(*) FROM events WHERE pushed = 0 AND event_code = 179")
+    suspend fun countUnsentCuts(): Int
+
+    // Marks every still-pending row permanently rejected. Applied at release only
+    // when the 302/304 marker landed, so the receipt and the kill are atomic.
+    // Covers 180 and 35 as well as 179 — they belong to the departing unit too.
+    @Query("UPDATE events SET pushed = 2 WHERE pushed = 0")
+    suspend fun strandAllPending(): Int
 }

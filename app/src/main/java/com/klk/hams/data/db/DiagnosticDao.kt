@@ -25,6 +25,12 @@ interface DiagnosticDao {
     @Query("SELECT pushed FROM diagnostics WHERE id = :id")
     suspend fun pushedState(id: Long): Int?
 
+    // Snapshot of every unpushed row, taken before a release drain so the caller
+    // can reject whatever did not land. Any row still pending after the drain
+    // belongs to the unit being left and must never push under the next one.
+    @Query("SELECT id FROM diagnostics WHERE pushed = 0 ORDER BY timestamp ASC, id ASC")
+    suspend fun pendingIds(): List<Long>
+
     @Query("UPDATE diagnostics SET pushed = 1 WHERE id = :id")
     suspend fun markPushed(id: Long)
 
