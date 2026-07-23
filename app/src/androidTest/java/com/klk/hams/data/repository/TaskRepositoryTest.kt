@@ -283,7 +283,73 @@ class TaskRepositoryTest {
         assertEquals("screen_off", rows.first().type)
     }
 
+    // ---- 302 work_stranded — leftover accounting (2026-07-23) ----
+
+    @Test fun countUnsentWork_countsTasksAndCutsSeparately() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 35)    // beacon — not a cut
+        val taskB = insertPendingTask()
+        insertEvent(taskB, pushed = 0, eventCode = 179)
+        insertEvent(taskB, pushed = 1, eventCode = 179)   // already uploaded
+
+        val unsent = repo.countUnsentWork()
+
+        assertEquals(2, unsent.tasks)
+        assertEquals(3, unsent.cuts)   // 179 at pushed = 0 only
+    }
+
+    @Test fun countUnsentWork_ignoresAlreadyStrandedRows() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 2, eventCode = 179)
+
+        val unsent = repo.countUnsentWork()
+
+        // A later release must not re-report work stranded by an earlier one.
+        assertEquals(0, unsent.tasks)
+        assertEquals(0, unsent.cuts)
+    }
+
+    @Test fun strandUnsentWork_marksRowsRejected_andTaskFailed() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 0, eventCode = 179)
+        insertEvent(taskId, pushed = 0, eventCode = 35)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(2, stranded)                       // 35 is stranded too
+        assertEquals(0, repo.countUnsentWork().cuts)
+        assertEquals(0, repo.pendingTasks().size)
+        assertNotNull(taskById(taskId, "failed"))
+    }
+
+    /**
+     * Three-way outcome: only `pushed = 0` moves. Uploaded work must never be
+     * resurrected as rejected, and rows stranded by an earlier release must not
+     * be touched a second time.
+     */
+    @Test fun strandUnsentWork_leavesUploadedAndAlreadyStrandedRowsUntouched() = runBlocking {
+        val taskId = insertPendingTask()
+        val pendingRow = insertEvent(taskId, pushed = 0, eventCode = 179)
+        val uploadedRow = insertEvent(taskId, pushed = 1, eventCode = 179)
+        val strandedRow = insertEvent(taskId, pushed = 2, eventCode = 179)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(1, stranded)
+        assertEquals(2, pushedStateOf(pendingRow))
+        assertEquals(1, pushedStateOf(uploadedRow))
+        assertEquals(2, pushedStateOf(strandedRow))
+    }
+
     // ---- helpers ----
+
+    private fun pushedStateOf(eventId: Long): Int =
+        db.query("SELECT pushed FROM events WHERE id = ?", arrayOf<Any>(eventId)).use {
+            assertEquals(true, it.moveToFirst())
+            it.getInt(0)
+        }
 
     private suspend fun insertPendingTask(): Long {
         val now = "2026-05-15T00:00:00Z"
@@ -305,8 +371,8 @@ class TaskRepositoryTest {
         )
     }
 
-    private suspend fun insertEvent(taskId: Long, pushed: Int, eventCode: Int) {
-        db.eventDao().insert(
+    private suspend fun insertEvent(taskId: Long, pushed: Int, eventCode: Int): Long {
+        return db.eventDao().insert(
             EventEntity(
                 taskId = taskId,
                 eventType = "plus",

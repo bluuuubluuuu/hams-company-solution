@@ -33,6 +33,10 @@ class TaskRepository(
      * [timestampIso] overrides the event time only (not `created_at`): used to
      * backfill a missed shutdown dated at the last-seen instant while keeping the
      * row's creation time fresh so the retention sweep does not purge it early.
+     *
+     * [lostTasks] / [lostCuts] are null for every diagnostic except the release
+     * markers (302 work_stranded, 304 device_unbound, 2026-07-23) — only those
+     * carry a leftover figure, and the frame builder omits the params when null.
      */
     suspend fun recordDiagnostic(
         type: com.klk.hams.diagnostics.DiagnosticType,
@@ -40,6 +44,8 @@ class TaskRepository(
         snapshot: LocationSnapshot? = null,
         timestampIso: String? = null,
         pushed: Int = 0,
+        lostTasks: Int? = null,
+        lostCuts: Int? = null,
     ): Long {
         val now = clock.nowUtcIso()
         return diagnosticDao.insert(
@@ -54,6 +60,8 @@ class TaskRepository(
                 hdop = snapshot?.hdop,
                 satellites = snapshot?.satellites,
                 speedKmh = snapshot?.speedKmh,
+                lostTasks = lostTasks,
+                lostCuts = lostCuts,
             )
         )
     }
@@ -448,6 +456,44 @@ class TaskRepository(
 
     suspend fun diagnosticPushedState(id: Long): Int? =
         diagnosticDao.pushedState(id)
+
+    /** Leftover accounting at release time (302 work_stranded, 2026-07-23). */
+    data class UnsentWork(val tasks: Int, val cuts: Int)
+
+    /**
+     * What this device would fail to deliver if it unbound right now.
+     *
+     * Both figures are counted over `events`, not `tasks`, so already-stranded
+     * work (`pushed = 2`) is never re-reported on a later release. `cuts` counts
+     * `event_code = 179` only — that is the harvest figure a report would have
+     * produced, and matching it keeps the loss metric and the harvest metric on
+     * the same arithmetic.
+     */
+    suspend fun countUnsentWork(): UnsentWork = UnsentWork(
+        tasks = eventDao.countUnsentTasks(),
+        cuts = eventDao.countUnsentCuts(),
+    )
+
+    /** Unpushed telemetry ids, snapshotted before a release drain. */
+    suspend fun pendingTelemetryIds(): List<Long> = diagnosticDao.pendingIds()
+
+    /**
+     * Permanently rejects every still-pending event row and drives the owning
+     * tasks to their terminal state. Called at release **only when the 302/304
+     * marker landed**, so the receipt and the kill are atomic — destroying
+     * harvest with no record is worse than misfiling it.
+     *
+     * Rows are marked `pushed = 2`, not deleted. They survive in SQLite for
+     * `AppConfig.SQLITE_RETENTION_DAYS` and are recoverable by a DB pull.
+     *
+     * Returns the number of event rows stranded.
+     */
+    suspend fun strandUnsentWork(): Int = db.withTransaction {
+        val affected = taskDao.pendingTasks().map { it.id }
+        val stranded = eventDao.strandAllPending()
+        for (taskId in affected) markTaskTerminalState(taskId)
+        stranded
+    }
 
     /** Marks an event as successfully uploaded. */
     suspend fun markEventUploaded(eventId: Long) {
