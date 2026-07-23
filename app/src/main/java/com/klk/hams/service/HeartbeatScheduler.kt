@@ -7,6 +7,7 @@ import android.os.Looper
 import com.klk.hams.AppConfig
 import com.klk.hams.HamsApp
 import com.klk.hams.data.location.LocationStream
+import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.push.GpsDegradedDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,9 @@ class HeartbeatScheduler(
 
     private suspend fun fire() {
         val app = context.applicationContext as? HamsApp ?: return
+        // Rows written while unbound would upload later under whichever unit the
+        // phone holds next, misattributing this worker's GPS/work_count.
+        if (!ProvisioningStore.fromContext(context).isProvisioned()) return
         val rawSnapshot = app.locationStream.snapshotFlow.value
         val location = if (LocationStream.isFresh(rawSnapshot)) rawSnapshot else null
         val battery = readBatteryPct()
