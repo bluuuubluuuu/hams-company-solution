@@ -43,9 +43,22 @@ class BindingRevalidator(
             pushed = pushed,
         )
 
-    /** Clears the stored unit and flips the observable flag so the open app
-     *  drops to the pairing screen with the banner. */
-    fun revoke(message: String) {
+    /**
+     * Strands every unsent row, then clears the stored unit and flips the
+     * observable flag so the open app drops to the pairing screen with the
+     * banner.
+     *
+     * The strand is **not optional and not conditional**. The Wialon unit id is
+     * a login credential in the frame, not a property of the phone: a row left
+     * `pushed = 0` when the binding is dropped uploads under whatever unit this
+     * handset binds to next, crediting one worker's harvest to another. The
+     * ranking the human set: misfiling harvest onto the wrong worker is worse
+     * than losing it. Same guarantee [ProvisioningEvents.flushAndRelease] gives
+     * the device-initiated OTP paths — this is the server-initiated twin
+     * (`bound_other`, and the belt-and-braces call after a released-flush).
+     */
+    suspend fun revoke(message: String) {
+        app.repository.strandUnsentWork()
         store.clearBlocking()
         app.provisioningRevocation.value = message
     }
