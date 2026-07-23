@@ -4,7 +4,9 @@
 
 **Goal:** Emit a Wialon event code `302 work_stranded` at a device-initiated OTP release when the phone is leaving with unsent harvest, carrying the leftover counts, and mark those rows non-sendable so the record is truthful.
 
-**Architecture:** `302` is the stranded-work variant of the existing `304 device_unbound` — mutually exclusive, one message per release. Both carry `lost_tasks` / `lost_cuts` params (`304` reports `0/0`). The message is pushed inline on the existing `ProvisioningEvents` path, in the same TCP session and under the **old** unit id, before `store.clear()`. If and only if it lands, all still-pending event rows are marked `pushed = 2` so they can never later push under the next unit.
+**Architecture:** `302` is the stranded-work variant of the existing `304 device_unbound` — mutually exclusive, one message per release. Both carry `lost_tasks` / `lost_cuts` params (`304` reports `0/0`). The message is pushed inline on the existing `ProvisioningEvents` path, in the same TCP session and under the **old** unit id, before `store.clear()`. All still-pending event rows are then marked `pushed = 2` **unconditionally** — whether or not the marker landed — so they can never later push under the next unit.
+
+> **Amended 2026-07-23 (Task 7 fix).** As originally planned and shipped, the strand was gated on the marker landing (`if (landed) strandUnsentWork()`). That left the original defect reachable on the gateway-failure path: with Wialon unreachable, `landed` is `false`, the rows stay `pushed = 0`, and `ReleaseAndBind` binds the phone to the next unit on the following line — so worker A's cuts upload under unit B. The human re-ranked the trade: **misfiling harvest is worse than losing it.** The strand is now unconditional, making mis-attribution impossible on every path. When the marker did not land the harvest is destroyed with no Wialon receipt; the only record is local (the release diagnostics row left at `pushed = 2`, plus the stranded event rows), readable by a DB pull and retained for `AppConfig.SQLITE_RETENTION_DAYS`. The code blocks below are annotated where they no longer match shipped behaviour.
 
 **Tech Stack:** Kotlin, Room (SQLite), Jetpack Compose, JUnit4, AndroidX Test. Gradle Kotlin DSL.
 
@@ -451,8 +453,9 @@ In `EventDao.kt`, add after line 59 (the closing brace of `countRejectedForTask`
     @Query("SELECT COUNT(*) FROM events WHERE pushed = 0 AND event_code = 179")
     suspend fun countUnsentCuts(): Int
 
-    // Marks every still-pending row permanently rejected. Applied at release only
-    // when the 302/304 marker landed, so the receipt and the kill are atomic.
+    // Marks every still-pending row permanently rejected. Applied at release
+    // unconditionally, whether or not the 302/304 marker reached the gateway
+    // (amended 2026-07-23 — see the header note).
     // Covers 180 and 35 as well as 179 — they belong to the departing unit too.
     @Query("UPDATE events SET pushed = 2 WHERE pushed = 0")
     suspend fun strandAllPending(): Int
@@ -600,9 +603,11 @@ In `TaskRepository.kt`, add after line 450 (the closing brace of `diagnosticPush
 
     /**
      * Permanently rejects every still-pending event row and drives the owning
-     * tasks to their terminal state. Called at release **only when the 302/304
-     * marker landed**, so the receipt and the kill are atomic — destroying
-     * harvest with no record is worse than misfiling it.
+     * tasks to their terminal state. Called at release **unconditionally**,
+     * whether or not the 302/304 marker reached the gateway — a row left
+     * `pushed = 0` would upload under the next unit this phone binds to, and
+     * misfiling harvest onto the wrong worker is worse than losing it.
+     * (Amended 2026-07-23 — see the header note.)
      *
      * Rows are marked `pushed = 2`, not deleted. They survive in SQLite for
      * `AppConfig.SQLITE_RETENTION_DAYS` and are recoverable by a DB pull.
@@ -715,9 +720,9 @@ In `ProvisioningEvents.kt`, replace lines 33-47 (the whole `recordAndPushUnbound
      * one: `drainTelemetry` sends the whole pending table, and any row left
      * `pushed = 0` here would push under the NEXT unit after `store.clear()`.
      *
-     * @return true if the marker reached the gateway. The caller strands the
-     *   cut rows only on true — killing harvest with no receipt is worse than
-     *   misfiling it.
+     * @return true if the marker reached the gateway. The strand is
+     *   unconditional either way; the flag only reports whether Wialon holds a
+     *   receipt for the release. (Amended 2026-07-23 — see the header note.)
      */
     suspend fun recordAndPushRelease(
         app: HamsApp,
@@ -751,15 +756,27 @@ In `ProvisioningEvents.kt`, replace lines 33-47 (the whole `recordAndPushUnbound
      *   2. count what would not be delivered
      *   3. push 302 or 304 to [uniqueId], the unit being LEFT — this must happen
      *      before the caller stores a new unit or clears the binding
-     *   4. strand the rows, only if the marker landed
+     *   4. strand the rows — unconditionally, whether or not step 3 landed
      *
-     * @return true if the marker reached the gateway.
+     * The strand in step 4 is **unconditional** (amended 2026-07-23 — see the
+     * header note; it was originally gated on `landed`, which left the
+     * mis-attribution defect reachable whenever the gateway was unreachable).
+     * The Wialon unit id is a login credential in the frame, not a property of
+     * the phone: any row left `pushed = 0` here uploads under whatever unit
+     * this handset binds to next. Stranding on every path makes that
+     * impossible. The cost on a gateway miss is that the harvest is destroyed
+     * with no Wialon receipt — the only record is local (the rejected
+     * diagnostics row plus the stranded event rows, both readable by a DB pull
+     * and retained for `AppConfig.SQLITE_RETENTION_DAYS`). The ranking:
+     * misfiling harvest is worse than losing it.
+     *
+     * @return true if the marker reached the gateway. Does not gate the strand.
      */
     suspend fun flushAndRelease(app: HamsApp, uniqueId: String): Boolean {
         app.repository.finalizeActiveTaskForRelease()
         val unsent = app.repository.countUnsentWork()
         val landed = recordAndPushRelease(app, uniqueId, unsent)
-        if (landed) app.repository.strandUnsentWork()
+        app.repository.strandUnsentWork()
         return landed
     }
 ```

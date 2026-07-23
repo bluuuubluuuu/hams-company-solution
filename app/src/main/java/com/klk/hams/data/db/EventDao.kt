@@ -70,8 +70,8 @@ interface EventDao {
     @Query("SELECT COUNT(*) FROM events WHERE pushed = 0 AND event_code = 179")
     suspend fun countUnsentCuts(): Int
 
-    // Marks every still-pending row permanently rejected. Applied at release only
-    // when the 302/304 marker landed, so the receipt and the kill are atomic.
+    // Marks every still-pending row permanently rejected. Applied at release
+    // unconditionally, whether or not the 302/304 marker reached the gateway.
     // Covers 180 and 35 as well as 179 — they belong to the departing unit too.
     // Code-agnostic (WHERE pushed = 0), unlike countRejectedForTask's event_code
     // filter above. Safe today only because PushEligibility.shouldQueueForPush

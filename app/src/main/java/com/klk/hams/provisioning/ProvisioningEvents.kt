@@ -57,9 +57,9 @@ object ProvisioningEvents {
      * one: `drainTelemetry` sends the whole pending table, and any row left
      * `pushed = 0` here would push under the NEXT unit after `store.clear()`.
      *
-     * @return true if the marker reached the gateway. The caller strands the
-     *   cut rows only on true — killing harvest with no receipt is worse than
-     *   misfiling it.
+     * @return true if the marker reached the gateway. The strand is
+     *   unconditional either way; the flag only reports whether Wialon holds a
+     *   receipt for the release.
      */
     suspend fun recordAndPushRelease(
         app: HamsApp,
@@ -96,15 +96,31 @@ object ProvisioningEvents {
      *   2. count what would not be delivered
      *   3. push 302 or 304 to [uniqueId], the unit being LEFT — this must happen
      *      before the caller stores a new unit or clears the binding
-     *   4. strand the rows, only if the marker landed
+     *   4. strand the rows — unconditionally, whether or not step 3 landed
      *
-     * @return true if the marker reached the gateway.
+     * The strand in step 4 is **unconditional**. The Wialon unit id is a login
+     * credential in the frame, not a property of the phone: any row left
+     * `pushed = 0` here uploads under whatever unit this handset binds to next,
+     * crediting one worker's harvest to another. Stranding on every path — the
+     * gateway-unreachable path included — makes that mis-attribution impossible.
+     *
+     * The cost when the marker did NOT land: the harvest is destroyed with no
+     * Wialon receipt. The only record is local — the release diagnostics row,
+     * which [recordAndPushRelease]'s rejection loop leaves at `pushed = 2`, plus
+     * the stranded event rows themselves. Both are readable by a DB pull and are
+     * retained for `AppConfig.SQLITE_RETENTION_DAYS`.
+     *
+     * The ranking this encodes: misfiling harvest onto the wrong worker is worse
+     * than losing it.
+     *
+     * @return true if the marker reached the gateway. Does not gate the strand;
+     *   callers may use it to report whether a receipt exists.
      */
     suspend fun flushAndRelease(app: HamsApp, uniqueId: String): Boolean {
         app.repository.finalizeActiveTaskForRelease()
         val unsent = app.repository.countUnsentWork()
         val landed = recordAndPushRelease(app, uniqueId, unsent)
-        if (landed) app.repository.strandUnsentWork()
+        app.repository.strandUnsentWork()
         return landed
     }
 

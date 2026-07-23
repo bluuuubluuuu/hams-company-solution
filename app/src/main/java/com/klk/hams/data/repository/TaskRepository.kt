@@ -483,9 +483,10 @@ class TaskRepository(
      * different row sets: `eventDao.strandAllPending()` is global (`WHERE
      * pushed = 0`), so it also strands the rows of a still-`active` task,
      * while `taskDao.pendingTasks()` only advances tasks already in
-     * `'pending'`. Called at release **only when the 302/304 marker
-     * landed**, so the receipt and the kill are atomic — destroying harvest
-     * with no record is worse than misfiling it.
+     * `'pending'`. Called at release **unconditionally**, whether or not the
+     * 302/304 marker reached the gateway — a row left `pushed = 0` would
+     * upload under the next unit this phone binds to, and misfiling harvest
+     * onto the wrong worker is worse than losing it.
      *
      * **Precondition: callers MUST finalize the active task before calling
      * this.** If an active task's rows are still `pushed = 0` when this
