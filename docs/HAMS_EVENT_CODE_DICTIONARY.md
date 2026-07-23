@@ -1,4 +1,4 @@
- bc# HAMS V2 — Event Code Dictionary
+# HAMS V2 — Event Code Dictionary
 
 **Document Version:** 1.5
 **Last Updated:** 2026-07-23
@@ -114,8 +114,10 @@ Release-marker rules (`302` / `304`, 2026-07-23):
 
 - **`304` no longer counts all unbinds.** After 2026-07-23 a device-initiated
   release emits `302` when it leaves harvest behind and `304` when it does not.
-  **Total releases = `302` + `304`.** A report counting only `304` silently omits
-  every problem release.
+  **Total device-initiated releases = `302` + `304`** (a lower bound — see the
+  gateway-miss limitation below). A report counting only `304` silently omits
+  every problem release. Admin-side frees (`301 binding_released`) are a
+  separate release path and are not part of this sum.
 - **Both release markers carry `lost_tasks` and `lost_cuts`** (integers, IPS
   param type `1`). The routing is on cuts alone, so on a `304` `lost_cuts` is
   **always 0** — a positive assertion that no harvest was left, not an absence.
@@ -557,7 +559,8 @@ behaviour.
 | 1.2 | 2026-04-30 | Tightened policy: only 179, 180, and 35 are approved outbound Wialon `event_code` values. HAMS-custom codes 279/280/281/283/284/291/292/293 are local/internal unless future Wialon admin configuration gives them reporting meaning. Task 2.4 must be redesigned before commit. |
 | 1.3 | 2026-07-02 | Added final, device + Wialon verified diagnostics telemetry Option B outbound codes: 24, 25, 26, 27, 29, 40, 41, 42, 43, 44. The task-event push path remains limited to 179/180/35; diagnostics telemetry pushes through a separate `diagnostics` table and telemetry frame path. |
 | 1.4 | 2026-07-07 | Added the provisioning 3xx family: `301 binding_released` (admin free → flush + logout), `303 device_bound` and `304 device_unbound` (pushed inline at OTP bind/unbind — both inherently online). Removed `302 binding_taken` (was phone-local only); `bound_other` now stops + logs out with no push, diagnosed server-side. Added the "All Event Codes at a Glance" master table. Field-verified live 2026-07-07 (301/303/304 confirmed in Wialon). |
-| 1.5 | 2026-07-23 | Reassigned `302` to `work_stranded` — emitted at a device-initiated OTP release when the phone leaves with unsent cuts, mutually exclusive with `304`. Both release markers now carry `lost_tasks` / `lost_cuts` params (type `1`); routing is on cuts alone, so `304` always reports `lost_cuts = 0` but may report a non-zero `lost_tasks` (a task holding only an unsent beacon). **Total releases = `302` + `304`.** Stranded event rows are marked `pushed = 2` **unconditionally** — whether or not the marker reached the gateway — so they can never later push under the next unit. `ReleaseResult.NotFound` now emits a marker too (was silent). Note: historical `binding_taken` `302`s exist on test units and carry no `lost_*` params. |
+| 1.5 | 2026-07-23 | **Code-verified only (264 unit tests); device verification for this branch has not yet been run.** Reassigned `302` to `work_stranded` — emitted at a device-initiated OTP release when the phone leaves with unsent cuts, mutually exclusive with `304`. Both release markers now carry `lost_tasks` / `lost_cuts` params (type `1`); routing is on cuts alone, so `304` always reports `lost_cuts = 0` but may report a non-zero `lost_tasks` (a task holding only an unsent beacon). **Total device-initiated releases = `302` + `304`** (a lower bound — see the
+gateway-miss limitation below). Stranded event rows are marked `pushed = 2` **unconditionally** — whether or not the marker reached the gateway — so they can never later push under the next unit. `ReleaseResult.NotFound` now emits a marker too (was silent). Note: historical `binding_taken` `302`s exist on test units and carry no `lost_*` params. |
 
 ---
 

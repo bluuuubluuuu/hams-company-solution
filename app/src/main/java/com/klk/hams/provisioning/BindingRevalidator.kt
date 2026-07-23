@@ -34,7 +34,7 @@ class BindingRevalidator(
         }
     }
 
-    /** Records the diagnostic row for a binding transition. 301 pushes, 302 local. */
+    /** Records the diagnostic row for a binding transition, e.g. `301 binding_released`. */
     suspend fun recordBinding(type: DiagnosticType, pushed: Int): Long =
         app.repository.recordDiagnostic(
             type = type,
