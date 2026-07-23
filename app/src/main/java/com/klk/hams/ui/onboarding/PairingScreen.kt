@@ -303,8 +303,13 @@ fun PairingScreen(
                         is PairingAdminAction.ReleaseAndBind -> {
                             when (val release = client.release(action.ownedUnit, fp, code)) {
                                 ReleaseResult.Success -> {
-                                    // 304 for the unit we just released, before re-binding.
-                                    ProvisioningEvents.recordAndPushUnbound(app, action.ownedUnit)
+                                    // 302/304 for the unit we just released, BEFORE
+                                    // re-binding. This is the release-then-rebind
+                                    // sequence that produced the A1 mis-attribution
+                                    // defect (2026-07-10): any row left pending here
+                                    // would push under the unit claimed on the next
+                                    // line. flushAndRelease strands them instead.
+                                    ProvisioningEvents.flushAndRelease(app, action.ownedUnit)
                                     when (val bind = client.manualClaim(unitId, fp, code)) {
                                     is BindResult.Success -> completePairing(bind.uniqueId)
                                     BindResult.AdminAuthFailed -> {

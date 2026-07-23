@@ -89,17 +89,20 @@ fun AdminSheet(
             }
             busy = true
             scope.launch {
+                // Shared by Success and NotFound: both end the binding, so both
+                // must flush the marker under the OLD unit before store.clear().
+                suspend fun finishRelease() {
+                    ProvisioningEvents.flushAndRelease(app, id)
+                    store.clear()
+                    onReset()
+                }
+
                 when (val release = client.release(id, fp, adminCode)) {
-                    ReleaseResult.Success -> {
-                        // 304 device_unbound: push to Wialon before clearing (unbind is online).
-                        ProvisioningEvents.recordAndPushUnbound(app, id)
-                        store.clear()
-                        onReset()
-                    }
-                    ReleaseResult.NotFound -> {
-                        store.clear()
-                        onReset()
-                    }
+                    ReleaseResult.Success -> finishRelease()
+                    // 404/409 — not found, or not the owner. The binding still ends
+                    // locally, and this is the messy path most likely to be carrying
+                    // unsent work, so it gets the same marker (was silent before).
+                    ReleaseResult.NotFound -> finishRelease()
                     ReleaseResult.AdminAuthFailed -> {
                         rememberAdminFailure(releaseFailureMessage(release))
                         busy = false
