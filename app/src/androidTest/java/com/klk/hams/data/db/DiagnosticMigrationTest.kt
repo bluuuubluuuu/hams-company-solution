@@ -100,11 +100,13 @@ class DiagnosticMigrationTest {
 
                 MIGRATION_5_6.migrate(db)
 
-                db.query("SELECT lost_tasks, lost_cuts FROM diagnostics").use { c ->
+                db.query("SELECT lost_tasks, lost_cuts, type, battery_pct FROM diagnostics").use { c ->
                     assertEquals(1, c.count)
                     c.moveToFirst()
                     assertTrue(c.isNull(0))   // legacy row has no counts
                     assertTrue(c.isNull(1))
+                    assertEquals("device_unbound", c.getString(2))
+                    assertEquals(77.0, c.getDouble(3), 0.001)
                 }
             }
         } finally {
