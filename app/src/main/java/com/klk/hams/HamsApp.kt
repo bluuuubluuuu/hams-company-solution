@@ -63,7 +63,14 @@ class HamsApp : Application() {
         com.klk.hams.provisioning.BindingRevalidator(this)
     }
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Process-lifetime scope. Exposed so UI call sites can run the durable part
+     * of a provisioning release here instead of on `rememberCoroutineScope()` —
+     * `MainActivity` has no `android:configChanges`, so an armband flip
+     * (`sensorPortrait` allows 0° and 180°) recreates the Activity and would
+     * otherwise cancel the sequence between its push and its strand.
+     */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()

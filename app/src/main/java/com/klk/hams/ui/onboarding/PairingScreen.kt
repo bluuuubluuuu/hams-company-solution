@@ -51,6 +51,7 @@ import com.klk.hams.ui.theme.FieldInk
 import com.klk.hams.ui.theme.FieldInkSoft
 import com.klk.hams.ui.theme.FieldScarlet
 import com.klk.hams.ui.theme.FieldSlate
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -309,7 +310,16 @@ fun PairingScreen(
                                     // defect (2026-07-10): any row left pending here
                                     // would push under the unit claimed on the next
                                     // line. flushAndRelease strands them instead.
-                                    ProvisioningEvents.flushAndRelease(app, action.ownedUnit)
+                                    //
+                                    // Runs on the application scope so an Activity
+                                    // recreation (armband flip — sensorPortrait, no
+                                    // configChanges) cannot cut the sequence between
+                                    // its marker push and its strand. The await keeps
+                                    // the ordering: no manualClaim until the release
+                                    // sequence has fully completed.
+                                    app.applicationScope.async {
+                                        ProvisioningEvents.flushAndRelease(app, action.ownedUnit)
+                                    }.await()
                                     when (val bind = client.manualClaim(unitId, fp, code)) {
                                     is BindResult.Success -> completePairing(bind.uniqueId)
                                     BindResult.AdminAuthFailed -> {

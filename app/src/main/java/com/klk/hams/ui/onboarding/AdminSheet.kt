@@ -38,6 +38,7 @@ import com.klk.hams.ui.theme.FieldHairline
 import com.klk.hams.ui.theme.FieldInk
 import com.klk.hams.ui.theme.FieldInkSoft
 import com.klk.hams.ui.theme.FieldScarlet
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 private sealed interface AdminSheetAction {
@@ -69,6 +70,10 @@ fun AdminSheet(
     var adminAction by remember { mutableStateOf<AdminSheetAction?>(null) }
     var adminError by remember { mutableStateOf<String?>(null) }
     var adminLockout by remember { mutableStateOf(AdminCodeLockout()) }
+    // true = the release is done and `status` carries an outcome the admin must
+    // read (discarded work, and/or no Wialon receipt). onReset() wipes `status`,
+    // so navigation is deferred to the sheet's own dismiss on this path.
+    var resetOnDismiss by remember { mutableStateOf(false) }
     val currentId = store.uniqueIdOrNull() ?: "(unpaired)"
 
     // Release this device's current unit (fingerprint-scoped), clear local, return
@@ -92,9 +97,39 @@ fun AdminSheet(
                 // Shared by Success and NotFound: both end the binding, so both
                 // must flush the marker under the OLD unit before store.clear().
                 suspend fun finishRelease() {
-                    ProvisioningEvents.flushAndRelease(app, id)
-                    store.clear()
-                    onReset()
+                    // Durable half runs on the application scope: an armband flip
+                    // recreates MainActivity and cancels `scope`, and a sequence cut
+                    // between the marker push and the strand either misfiles the
+                    // harvest onto the next unit or destroys it while still bound.
+                    // Only the await below is cancellable.
+                    val outcome = app.applicationScope.async {
+                        val o = ProvisioningEvents.flushAndRelease(app, id)
+                        store.clear()
+                        o
+                    }.await()
+
+                    val lost = outcome.lost
+                    val discarded = if (lost.tasks > 0 || lost.cuts > 0) {
+                        "Released. ${lost.tasks} tasks / ${lost.cuts} cuts discarded (never uploaded)."
+                    } else {
+                        null
+                    }
+                    val unconfirmed = if (!outcome.landed) {
+                        "Wialon did not confirm the release."
+                    } else {
+                        null
+                    }
+                    val report = listOfNotNull(discarded, unconfirmed).joinToString(" ")
+                    if (report.isEmpty()) {
+                        // Clean release, receipt held: stay quiet, as before.
+                        onReset()
+                    } else {
+                        status = "$report Close to continue."
+                        adminAction = null
+                        // busy stays true: the unit is already released, so no
+                        // further sheet action is meaningful until the reset lands.
+                        resetOnDismiss = true
+                    }
                 }
 
                 when (val release = client.release(id, fp, adminCode)) {
@@ -150,7 +185,7 @@ fun AdminSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (resetOnDismiss) onReset() else onDismiss() },
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
