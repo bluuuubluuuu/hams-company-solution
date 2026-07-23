@@ -21,6 +21,10 @@ object TelemetryCode {
         "binding_released" to 301,
         "device_bound" to 303,
         "device_unbound" to 304,
+        // 302 was `binding_taken` until 2026-07-07 (removed, phone-local only).
+        // Reassigned 2026-07-23 to work_stranded. Historical `binding_taken`
+        // 302s exist on test units and carry no lost_* params.
+        "work_stranded" to 302,
     )
 
     fun eventCodeFor(type: String): Int? = TABLE[type]

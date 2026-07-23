@@ -19,4 +19,15 @@ class TelemetryCodeBindingTest {
     @Test fun removed_binding_taken_has_no_code() {
         assertEquals(null, TelemetryCode.eventCodeFor("binding_taken"))
     }
+
+    @Test fun work_stranded_maps_to_302() {
+        assertEquals(302, TelemetryCode.eventCodeFor("work_stranded"))
+    }
+
+    @Test fun work_stranded_wire_string_matches_enum() {
+        assertEquals(
+            "work_stranded",
+            com.klk.hams.diagnostics.DiagnosticType.WORK_STRANDED.wire,
+        )
+    }
 }
