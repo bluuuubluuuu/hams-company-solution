@@ -73,6 +73,10 @@ interface EventDao {
     // Marks every still-pending row permanently rejected. Applied at release only
     // when the 302/304 marker landed, so the receipt and the kill are atomic.
     // Covers 180 and 35 as well as 179 — they belong to the departing unit too.
+    // Code-agnostic (WHERE pushed = 0), unlike countRejectedForTask's event_code
+    // filter above. Safe today only because PushEligibility.shouldQueueForPush
+    // keeps pushed = 0 a subset of getPending's allow-list (179/180/35) — if that
+    // invariant ever breaks, a stranded task could read back as 'uploaded'.
     @Query("UPDATE events SET pushed = 2 WHERE pushed = 0")
     suspend fun strandAllPending(): Int
 }

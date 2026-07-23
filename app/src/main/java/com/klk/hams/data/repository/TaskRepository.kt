@@ -478,10 +478,21 @@ class TaskRepository(
     suspend fun pendingTelemetryIds(): List<Long> = diagnosticDao.pendingIds()
 
     /**
-     * Permanently rejects every still-pending event row and drives the owning
-     * tasks to their terminal state. Called at release **only when the 302/304
-     * marker landed**, so the receipt and the kill are atomic — destroying
-     * harvest with no record is worse than misfiling it.
+     * Permanently rejects every still-pending event row and drives
+     * `push_status = 'pending'` tasks to their terminal state. These are two
+     * different row sets: `eventDao.strandAllPending()` is global (`WHERE
+     * pushed = 0`), so it also strands the rows of a still-`active` task,
+     * while `taskDao.pendingTasks()` only advances tasks already in
+     * `'pending'`. Called at release **only when the 302/304 marker
+     * landed**, so the receipt and the kill are atomic — destroying harvest
+     * with no record is worse than misfiling it.
+     *
+     * **Precondition: callers MUST finalize the active task before calling
+     * this.** If an active task's rows are still `pushed = 0` when this
+     * runs, they are stranded (`pushed = 2`) but that task's `push_status`
+     * is left `'active'` — it is not driven terminal here, and the returned
+     * count still includes its rows. It resolves on the next push run, when
+     * `PushWorker`'s terminal-state sweep drives it to `'failed'`.
      *
      * Rows are marked `pushed = 2`, not deleted. They survive in SQLite for
      * `AppConfig.SQLITE_RETENTION_DAYS` and are recoverable by a DB pull.

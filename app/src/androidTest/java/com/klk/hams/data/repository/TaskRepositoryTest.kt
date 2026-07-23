@@ -341,6 +341,18 @@ class TaskRepositoryTest {
         assertEquals(2, pushedStateOf(pendingRow))
         assertEquals(1, pushedStateOf(uploadedRow))
         assertEquals(2, pushedStateOf(strandedRow))
+        assertNotNull(taskById(taskId, "failed"))
+    }
+
+    @Test fun strandUnsentWork_noPendingRows_isNoOp() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(0, stranded)
+        assertNotNull(taskById(taskId, "uploaded"))
+        assertNull(taskById(taskId, "failed"))
     }
 
     // ---- helpers ----
