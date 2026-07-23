@@ -965,14 +965,77 @@ git commit -m "docs(event-codes): v1.5 — 302 work_stranded + lost_* params"
 
 ## Device Verification
 
-Not done until this passes on a physical device.
+Run on physical device `ALI-NX1` (Android 15), debug build, 2026-07-23, against the
+local n8n stack (Docker `hams-n8n` + Neon Postgres) reached over `adb reverse tcp:5678`,
+with cut data going to live Wialon test units `HAMS_TEST_003` / `HAMS_TEST_004`.
 
-- [ ] **V1 — clean release emits 304 with zeros.** Pair to a test unit. Record no cuts. OTP-release. Confirm in Wialon: `event_code=304, lost_tasks=0, lost_cuts=0`.
-- [ ] **V2 — stranded release emits 302.** Pair, record 3 cuts with no network, hold NEW TASK, then enable network and OTP-release without waiting for a push. Confirm in Wialon: `event_code=302, lost_tasks=1, lost_cuts=3`.
-- [ ] **V3 — the rows are dead.** After V2, pair the same handset to a **different** unit and enable Wi-Fi. Confirm in Wialon: **no cuts arrive on the new unit.** Confirm on device: `adb shell run-as com.klk.hams.debug sqlite3 databases/hams.db "SELECT pushed, COUNT(*) FROM events GROUP BY pushed"` shows the 3 rows at `pushed = 2`.
-- [ ] **V4 — other codes unchanged.** Trigger a `screen_off` and confirm its Wialon frame still ends at `work_count=0` with no `lost_*` params.
-- [ ] **V5 — migration on real data.** Install the new build over an existing v5 database holding cuts. Confirm the app opens, the task cache is intact, and no rows were lost.
-- [ ] **V6 — the A1 regression, on the rebind path.** This is the exact 2026-07-10 sequence. Pair to unit A, record cuts with no network, hold NEW TASK. On the pairing screen use **Release and bind** to move straight to unit B. Enable Wi-Fi. Confirm in Wialon: `302` on **unit A** with the correct counts, and **no cuts on unit B**. This is the highest-value check in the list — it is the defect reproducing, or not.
+- [x] **V1 — release with no unsent cuts emits `304`.** Wi-Fi up throughout, so `PushWorker`
+  had already delivered all 8 cuts to `HAMS_TEST_004` before the release. Wialon msg 18,
+  17:02:16 MYT: `event_code=304, lost_tasks=1, lost_cuts=0`. **`lost_tasks=1` is correct,
+  not a defect** — one heartbeat was still queued. This is the beacon-only asymmetry the
+  code deliberately reports rather than masking to `0/0`; had it been forced to zeros the
+  outstanding beacon would have been invisible.
+- [x] **V2 — release with unsent cuts emits `302`.** Wi-Fi and mobile data off while
+  recording 3 cuts, so `PushWorker` could not reach `185.213.1.24`. Task left **active** to
+  exercise `finalizeActiveTaskForRelease()`. Wialon `HAMS_TEST_003` msg 7, 17:11:52 MYT:
+  `event_code=302, lost_tasks=1, lost_cuts=3`. Device row `diagnostics.id=13` matches
+  exactly. `lost_cuts=3` (not `0`) proves the active task was finalized before counting —
+  issue A3's failure mode did not occur.
+- [x] **V3 — the rows are dead.** After V2: 3 × `179` and 1 × `35` at `pushed = 2`; task 3
+  `push_status='failed'`, `save_type='auto_released'`. **Zero rows at `pushed = 0` anywhere
+  in either table**, so the unpaired handset holds nothing that could upload under the next
+  unit. `HAMS_TEST_003` shows the `302` and **no cut messages at all** — 3 recorded,
+  0 delivered, 1 receipt.
+- [x] **V4 — other codes unchanged.** `HAMS_TEST_003` msgs 1–6 (`41`, `303`, `42`, `26`,
+  `27`, `41`) all render with no `lost_*` params, ending at `work_count=0`. Byte-identity
+  for the ten untouched telemetry codes confirmed on live data, not just by unit test.
+- [x] **V5 — migration on real data.** Installed `main` (`95ad290`), paired, recorded cuts
+  offline, then installed `feat/302-work-stranded` **over the top without uninstalling**.
+  `PRAGMA user_version` 5 → 6; `lost_tasks`/`lost_cuts` present and NULL on every legacy
+  row; both tasks and all events intact (5 + 2 cuts, statuses preserved); no crash.
+- [x] **V6 — the A1 regression, on the rebind path.** Released `HAMS_TEST_004` and bound
+  `HAMS_TEST_003` back to back. All 8 cuts landed on **`HAMS_TEST_004`** (msgs 4–10, 15),
+  marker `304` on `004` at 17:02:16, `301` flush at 17:02:17, `303` bind on `003` at
+  17:03:00. **`HAMS_TEST_003` carried no cut messages.** The 2026-07-10 defect did not
+  reproduce.
+
+### Still outstanding
+
+- [ ] **V7 — gateway-miss: marker fails, rows stranded anyway.** Both releases above had
+  working network, so `flushAndRelease` returned `landed = true` and the pre-fix
+  `if (landed)` code would have behaved identically. The unconditional strand — the
+  behaviour changed on 2026-07-23 after the human re-ranked misfiling as worse than
+  losing — is therefore covered only by `ReleaseSequenceTest.notLanded_stillStrands`
+  (verified to fail under mutation). **Stage with airplane mode:** `adb reverse` survives
+  on USB so the n8n release still completes, but nothing reaches `185.213.1.24`. Record 3
+  cuts, airplane mode, release. Expect the `302` diagnostics row at `pushed = 2`, the cuts
+  at `pushed = 2` regardless, and the admin sheet reporting that Wialon did not confirm.
+  Worth closing before a fleet flash — there is no OTA path.
+
+### Observations from the test campaign (not defects in this branch)
+
+- **Spec issue A3 is wrong.** `EventDao.getPending` has no task-status filter, so an
+  *active* task's events drain normally whenever `PushWorker` runs — only the task *row*
+  is invisible to `pendingTasks()`. Harvest in an active task is not at risk. A3 is
+  task-row bookkeeping, not a P0 data-loss defect. Observed live: task 2's cuts uploaded
+  to `HAMS_TEST_004` while the task was still `active`.
+- **`flushAndRelease` can race a concurrent `PushWorker`.** In V1, task 2 finished at
+  `push_status='failed'` with every event at `pushed = 1`. The strand marked rows `2`,
+  `markTaskTerminalState` saw rejected rows and wrote `failed`, then in-flight sends acked
+  and flipped those rows back to `1`. No data lost and no misfiling — the task row's
+  terminal state is simply wrong, and a `302` in that window could over-report cuts as lost
+  that actually landed. Errs toward over-reporting.
+- **`work_count` resets are invisible in Wialon, confirmed live.** `HAMS_TEST_004` shows
+  `work_count` 1,2,3,4,5 then 1,2 then 3 across two tasks. `max()` gives 5, last gives 3,
+  the truth is 8. Only `count(rows where ffb_cut = 1)` is correct — as the dictionary now
+  states. Show this to whoever builds the report template.
+- **Four cuts shared timestamp 16:55:47** (msgs 4–7). They arrived in `work_count` order
+  this time, but the second-resolution collision the spec warns about is present in live data.
+- **`CLAUDE.md`'s device-DB query does not work on this hardware.** `ALI-NX1` has no
+  `sqlite3` binary. Pull and query on the host instead, including the `-wal` file or recent
+  writes are missing:
+  `adb exec-out run-as com.klk.hams.debug cat databases/hams.db > hams.db` (repeat for
+  `hams.db-wal`), then `sqlite3 hams.db "..."`.
 
 ---
 
