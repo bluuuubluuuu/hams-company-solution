@@ -17,4 +17,8 @@ data class DiagnosticEntity(
     @ColumnInfo(name = "hdop")        val hdop: Double? = null,
     @ColumnInfo(name = "satellites")  val satellites: Int? = null,
     @ColumnInfo(name = "speed_kmh")   val speedKmh: Int? = null,
+    /** 302/304 only: tasks with unsent pushable rows at release time. Null elsewhere. */
+    @ColumnInfo(name = "lost_tasks")  val lostTasks: Int? = null,
+    /** 302/304 only: unsent `event_code = 179` rows at release time. Null elsewhere. */
+    @ColumnInfo(name = "lost_cuts")   val lostCuts: Int? = null,
 )

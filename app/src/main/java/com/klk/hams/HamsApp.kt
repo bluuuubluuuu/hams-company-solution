@@ -16,6 +16,7 @@ import com.klk.hams.data.db.MIGRATION_1_2
 import com.klk.hams.data.db.MIGRATION_2_3
 import com.klk.hams.data.db.MIGRATION_3_4
 import com.klk.hams.data.db.MIGRATION_4_5
+import com.klk.hams.data.db.MIGRATION_5_6
 import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
 import com.klk.hams.push.BindingCheckWorker
@@ -36,7 +37,9 @@ class HamsApp : Application() {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(applicationContext, AppDatabase::class.java, "hams.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            )
             .build()
     }
 

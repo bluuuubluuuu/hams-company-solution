@@ -10,7 +10,7 @@ import com.klk.hams.data.model.Task
 
 @Database(
     entities = [Task::class, EventEntity::class, DiagnosticEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -69,5 +69,17 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE diagnostics ADD COLUMN satellites INTEGER")
         db.execSQL("ALTER TABLE diagnostics ADD COLUMN speed_kmh INTEGER")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_diagnostics_pushed ON diagnostics(pushed)")
+    }
+}
+
+/**
+ * Adds diagnostics.lost_tasks / lost_cuts — the leftover counts carried by the
+ * 302 work_stranded and 304 device_unbound release markers. Nullable: every
+ * other telemetry code leaves them NULL and its frame is unchanged.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN lost_tasks INTEGER")
+        db.execSQL("ALTER TABLE diagnostics ADD COLUMN lost_cuts INTEGER")
     }
 }
