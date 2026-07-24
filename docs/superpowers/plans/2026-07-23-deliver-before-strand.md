@@ -26,13 +26,15 @@
 |---|---|---|
 | `app/src/main/java/com/klk/hams/push/PushGate.kt` | mutual exclusion between the two cut-senders | **create** — a shared `Mutex` |
 | `app/src/main/java/com/klk/hams/push/PushWorker.kt` | background drain | wrap `engine.run()` in the gate |
-| `app/src/main/java/com/klk/hams/data/db/EventDao.kt` | event queries | snapshot cut ids + count-not-uploaded |
-| `app/src/main/java/com/klk/hams/data/repository/TaskRepository.kt` | domain surface | `pendingCutIds`, `lostAmong` |
+| `app/src/main/java/com/klk/hams/data/db/EventDao.kt` | event queries | snapshot cut ids + count-not-uploaded + guarded uploaded-mark |
+| `app/src/main/java/com/klk/hams/data/repository/TaskRepository.kt` | domain surface | `pendingCutIds`, `lostAmong`, guard `markEventUploaded` |
 | `app/src/main/java/com/klk/hams/AppConfig.kt` | config | `DELIVER_BUDGET_MS` |
-| `app/src/main/java/com/klk/hams/provisioning/ProvisioningEvents.kt` | release sequence | two-phase split, bounded guarded deliver, payload trim |
-| `app/src/main/java/com/klk/hams/ui/onboarding/AdminSheet.kt` | release call site 1 | reorder deliver-before-release, progress text |
-| `app/src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt` | release call site 2 | reorder deliver-before-release |
+| `app/src/main/java/com/klk/hams/provisioning/ProvisioningEvents.kt` | release sequence | two-phase split, ownership-gated bounded deliver, payload trim |
+| `app/src/main/java/com/klk/hams/ui/onboarding/AdminSheet.kt` | release call site 1 | preflight verify, reorder deliver-before-release, progress text |
+| `app/src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt` | release call site 2 | preflight verify, reorder deliver-before-release |
 | `docs/HAMS_EVENT_CODE_DICTIONARY.md` | vocabulary | v1.6 payload change |
+
+**Tasks 4 and 5 are merged into one atomic slice** (Task 4 below). The `ProvisioningEvents` rewrite removes `flushAndRelease`, which both UI call sites still call — so main-source compilation is red until the call sites move. `:app:testDebugUnitTest` compiles main, so no unit test can pass in between. The rewrite and both call-site updates therefore land in one task, one green commit. (Review finding P2.)
 
 ---
 
@@ -185,6 +187,15 @@ In `EventDao.kt`, add after the `strandAllPending()` query (inside the interface
     // ("N tasks / M cuts discarded"). Never goes on the wire.
     @Query("SELECT COUNT(DISTINCT task_id) FROM events WHERE id IN (:ids) AND pushed != 1")
     suspend fun countTasksNotUploadedAmong(ids: List<Long>): Int
+
+    // Guarded uploaded-mark (review finding P1a). Only 0 -> 1 is a valid ack
+    // transition. Without the `pushed = 0` guard, a PushWorker running
+    // concurrently with the release path could flip a just-stranded row
+    // (pushed = 2) back to 1 after the 302 already reported it lost, leaving
+    // inconsistent state. This makes the strand-vs-worker interleaving benign:
+    // once stranded, a row stays stranded.
+    @Query("UPDATE events SET pushed = 1 WHERE id = :id AND pushed = 0")
+    suspend fun markUploadedIfPending(id: Long)
 ```
 
 - [ ] **Step 2: Build to verify Room generates the DAO**
@@ -196,7 +207,7 @@ Expected: BUILD SUCCESSFUL (Room compiles the new `@Query` methods; a malformed 
 
 ```bash
 git add app/src/main/java/com/klk/hams/data/db/EventDao.kt
-git commit -m "feat(db): snapshot cut-id and not-uploaded-among queries"
+git commit -m "feat(db): snapshot cut-id, not-uploaded, guarded uploaded-mark"
 ```
 
 ---
@@ -208,10 +219,11 @@ git commit -m "feat(db): snapshot cut-id and not-uploaded-among queries"
 - Test: `app/src/androidTest/java/com/klk/hams/data/repository/TaskRepositoryTest.kt`
 
 **Interfaces:**
-- Consumes: `EventDao.pendingCutIds`, `EventDao.countNotUploadedAmong`, `EventDao.countTasksNotUploadedAmong` (Task 2); `TaskRepository.UnsentWork` (exists).
+- Consumes: `EventDao.pendingCutIds`, `EventDao.countNotUploadedAmong`, `EventDao.countTasksNotUploadedAmong`, `EventDao.markUploadedIfPending` (Task 2); `TaskRepository.UnsentWork` (exists).
 - Produces:
   - `TaskRepository.pendingCutIds(): List<Long>`
   - `TaskRepository.lostAmong(snapshotIds: List<Long>): UnsentWork` — `(tasks = distinct not-uploaded tasks, cuts = not-uploaded cuts)`.
+  - `TaskRepository.markEventUploaded` now delegates to the guarded `markUploadedIfPending` (behaviour unchanged for the normal push path; a stranded row can no longer be resurrected).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -258,6 +270,26 @@ Append inside `TaskRepositoryTest`, before the closing brace. The class provides
         assertEquals(0, lost.cuts)
         assertEquals(0, lost.tasks)
     }
+
+    @Test fun markEventUploaded_doesNotResurrectAStrandedRow() = runBlocking {
+        // Review finding P1a: a stranded row (pushed=2) must never flip to 1 on a
+        // late worker ack. The guarded query only moves 0 -> 1.
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 2, eventCode = 179)   // already stranded
+        val strandedId = db.eventDao().pendingCutIds()     // empty — it's not pending
+        assertEquals(0, strandedId.size)
+
+        // Find the stranded row's id and try to mark it uploaded.
+        val id = db.eventDao().let {
+            // the only event we inserted; id is 1 in a fresh in-memory db
+            1L
+        }
+        repo.markEventUploaded(id)
+
+        // It stays stranded — the guard blocked the 2 -> 1 transition.
+        val lost = repo.lostAmong(listOf(id))
+        assertEquals(1, lost.cuts)   // still counted as not-uploaded
+    }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -290,6 +322,28 @@ In `TaskRepository.kt`, add after `strandUnsentWork()` (around line 508):
     )
 ```
 
+- [ ] **Step 3b: Guard `markEventUploaded` against resurrection**
+
+Change the existing `markEventUploaded` (around `TaskRepository.kt:511`) from:
+
+```kotlin
+    suspend fun markEventUploaded(eventId: Long) {
+        eventDao.markPushed(listOf(eventId), 1)
+    }
+```
+
+to:
+
+```kotlin
+    suspend fun markEventUploaded(eventId: Long) {
+        // Guarded (review finding P1a): only 0 -> 1. A row the release path just
+        // stranded (pushed = 2) must not be flipped back by a late worker ack.
+        eventDao.markUploadedIfPending(eventId)
+    }
+```
+
+`markEventRejected` keeps using the unguarded `markPushed(id, 2)` — a rejection must always apply.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `.\gradlew.bat :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.klk.hams.data.repository.TaskRepositoryTest`
@@ -304,22 +358,27 @@ git commit -m "feat(repo): pendingCutIds + lostAmong for snapshot loss counting"
 
 ---
 
-### Task 4: ProvisioningEvents — two-phase release, bounded guarded deliver, payload trim
+### Task 4: ProvisioningEvents two-phase release + both call sites (one atomic slice)
+
+> **Why this task is large (review finding P2):** the `ProvisioningEvents` rewrite removes `flushAndRelease`, which both `AdminSheet` and `PairingScreen` call. `:app:testDebugUnitTest` compiles the main source set, so no unit test can pass while the call sites still reference the removed function. The rewrite and both call-site updates therefore land together, ending in one green commit. Do the sub-steps in order; the build is red only *within* the task, never at a commit.
 
 **Files:**
 - Modify: `app/src/main/java/com/klk/hams/AppConfig.kt` (after `PUSH_MANUAL_TIMEOUT_MS`, `:110`)
 - Modify: `app/src/main/java/com/klk/hams/provisioning/ProvisioningEvents.kt` (whole release section)
+- Modify: `app/src/main/java/com/klk/hams/ui/onboarding/AdminSheet.kt` (release body + import)
+- Modify: `app/src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt` (ReleaseAndBind body)
 - Test: `app/src/test/java/com/klk/hams/provisioning/ReleaseSequenceTest.kt`
 - Test: `app/src/test/java/com/klk/hams/push/TelemetryFrameBuilderTest.kt`
 
 **Interfaces:**
-- Consumes: `PushGate` (Task 1); `TaskRepository.pendingCutIds`, `lostAmong` (Task 3); `PushEngine`, `PushRepositoryImpl`, `WialonIPSClient` (exist).
+- Consumes: `PushGate` (Task 1); `TaskRepository.pendingCutIds`, `lostAmong` (Task 3); `PushEngine`, `PushRepositoryImpl`, `WialonIPSClient`, `ProvisioningClient.verify`, `VerifyResult.Bound` (exist).
 - Produces:
   - `AppConfig.DELIVER_BUDGET_MS: Long`
-  - `ProvisioningEvents.deliverBeforeRelease(app, uniqueId): List<Long>` — finalize, snapshot, guarded bounded deliver; returns the snapshot.
+  - `ProvisioningEvents.deliverBeforeRelease(app, uniqueId, deliver: Boolean): List<Long>` — finalize, snapshot, and (only when `deliver`) an ownership-confirmed bounded wait-then-drain; returns the snapshot.
   - `ProvisioningEvents.markAndStrand(app, uniqueId, snapshot): ReleaseOutcome` — count-lost, marker, strand.
   - `ProvisioningEvents.runMarkAndStrand(countLost, pushMarker, strand): ReleaseOutcome` — the JVM-testable seam (replaces `runReleaseSequence`).
-  - **Removed:** `flushAndRelease`, `runReleaseSequence` (both call sites move to the two-phase pair in Task 5).
+  - Both call sites: preflight `client.verify(...) == VerifyResult.Bound` decides the `deliver` flag, then deliver → `client.release()` → `markAndStrand`.
+  - **Removed:** `flushAndRelease`, `runReleaseSequence`.
 
 - [ ] **Step 1: Add the budget constant**
 
@@ -458,32 +517,44 @@ Replace everything from `releaseTypeFor` (line 41) through the end of `flushAndR
      *
      *   1. finalize the active task (issue A3 — else its cuts are invisible)
      *   2. snapshot the pending 179 ids (the loss is measured against this fixed set)
-     *   3. deliver: if the background worker is not already draining (PushGate),
-     *      run a single-attempt bounded PushEngine over pending cuts under
-     *      [uniqueId]. If the worker IS draining, skip — it is already sending
-     *      these cuts, and sending them again would double-count (codex #2).
+     *   3. deliver — ONLY if [deliver] is true (the call site's preflight verify
+     *      confirmed this phone still owns the unit). Waits (bounded) for the
+     *      background worker to release [PushGate], then drains the remainder under
+     *      [uniqueId]. `withLock` suspends until the worker is done, so the two
+     *      never send the same 179 concurrently (no duplicate — codex #2).
+     *
+     * When [deliver] is false, the preflight verify said this phone no longer owns
+     * the unit (reassigned / released). Sending harvest under it would misfile —
+     * the exact defect this branch fights (review finding P1b). So we skip the
+     * send: the snapshot still returns, everything counts as lost, and
+     * [markAndStrand] strands it (today's safe behaviour for the not-owned path).
      *
      * @return the snapshot of 179 ids, handed to [markAndStrand] after the webhook.
      */
-    suspend fun deliverBeforeRelease(app: HamsApp, uniqueId: String): List<Long> {
+    suspend fun deliverBeforeRelease(
+        app: HamsApp,
+        uniqueId: String,
+        deliver: Boolean,
+    ): List<Long> {
         app.repository.finalizeActiveTaskForRelease()
         val snapshot = app.repository.pendingCutIds()
-        if (PushGate.mutex.tryLock()) {
+        if (deliver) {
             try {
-                val engine = buildReleaseDeliveryEngine(app, uniqueId)
-                try {
-                    withTimeout(AppConfig.DELIVER_BUDGET_MS) { engine.run() }
-                } catch (_: TimeoutCancellationException) {
-                    // Partial deliver: the snapshot count reflects what landed.
-                    // Only withTimeout's own cancellation is caught here — an
-                    // outer-scope cancel (Activity recreation) is not, because
-                    // this runs on the application scope at the call site.
+                withTimeout(AppConfig.DELIVER_BUDGET_MS) {
+                    // Wait for the worker to finish (withLock suspends), then deliver
+                    // the remainder. Never a concurrent send with the worker.
+                    PushGate.mutex.withLock {
+                        buildReleaseDeliveryEngine(app, uniqueId).run()
+                    }
                 }
-            } finally {
-                PushGate.mutex.unlock()
+            } catch (_: TimeoutCancellationException) {
+                // Worker too slow, or our own drain over budget: partial deliver.
+                // The snapshot count reflects what landed; the later strand is kept
+                // benign by markUploadedIfPending (P1a). Only withTimeout's own
+                // cancellation is caught — an outer-scope cancel (Activity
+                // recreation) is not, because this runs on the application scope.
             }
         }
-        // else: worker holds the gate; it is draining these cuts. Skip.
         return snapshot
     }
 
@@ -545,12 +616,9 @@ import kotlinx.coroutines.withTimeout
 
 (`import com.klk.hams.data.repository.TaskRepository` already exists; `PushEngine`/`PushRepositoryImpl` are referenced fully-qualified above so no import needed for them. `WialonIPSClient` import already exists.)
 
-- [ ] **Step 5: Run the seam tests to verify they pass**
+- [ ] **Step 5: (build is red here — expected) Update the frame-builder tests for the payload trim**
 
-Run: `.\gradlew.bat :app:testDebugUnitTest --tests "com.klk.hams.provisioning.ReleaseSequenceTest"`
-Expected: PASS, 3 tests. Compilation of `AdminSheet.kt` / `PairingScreen.kt` will now FAIL (they call the removed `flushAndRelease`) — Task 5 fixes both. Do not commit a broken build without Task 5.
-
-- [ ] **Step 6: Update the frame-builder tests for the payload trim**
+At this point `AdminSheet` / `PairingScreen` still call the removed `flushAndRelease`, so the build will not compile until Step 8. That is expected — keep going, do not try to "fix" it early. Next, update the frame tests.
 
 In `app/src/test/java/com/klk/hams/push/TelemetryFrameBuilderTest.kt`, replace `workStranded_frame_carriesLostParams` and `deviceUnbound_clean_carriesZeroLostParams` with:
 
@@ -607,41 +675,33 @@ In `app/src/test/java/com/klk/hams/push/TelemetryFrameBuilderTest.kt`, replace `
     }
 ```
 
-- [ ] **Step 7: Run frame tests to verify they pass**
+- [ ] **Step 6: Run frame tests (build still red — verify by compiling the test only if possible)**
 
 Run: `.\gradlew.bat :app:testDebugUnitTest --tests "com.klk.hams.push.TelemetryFrameBuilderTest"`
-Expected: PASS. `startMoving_frame_isByteExact` and `otherCodes_haveNoLostParams` must still pass (the ten other codes are unaffected). Do not commit — the build is still red until Task 5.
+Note: this will FAIL TO COMPILE (main source references removed `flushAndRelease`) until Step 8. Read the frame-test code you wrote in Step 5 against `IPSFrameBuilder.telemetryFrame`'s null-append logic and confirm it is correct; the real run happens at Step 9 once the tree is green.
 
-- [ ] **Step 8: Commit (with Task 5 — build is red until then)**
+- [ ] **Step 7: Rewrite the AdminSheet release body (preflight verify + deliver-before-release)**
 
-Defer the commit to Task 5, which restores a green build. If you must checkpoint, commit tests + `ProvisioningEvents` + `AppConfig` together and note the build is intentionally red pending Task 5.
+In `AdminSheet.kt`, add the import alongside the other `com.klk.hams.provisioning` imports:
 
----
+```kotlin
+import com.klk.hams.provisioning.VerifyResult
+```
 
-### Task 5: Both call sites — deliver before release + progress text
-
-**Files:**
-- Modify: `app/src/main/java/com/klk/hams/ui/onboarding/AdminSheet.kt:96-151`
-- Modify: `app/src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt:304-322`
-
-**Interfaces:**
-- Consumes: `ProvisioningEvents.deliverBeforeRelease`, `markAndStrand`, `ReleaseOutcome` (Task 4).
-- Produces: nothing downstream.
-
-Both sites move from "release then flush" to "deliver → release → mark+strand." Deliver and mark+strand each run on `app.applicationScope.async {…}.await()` so an armband flip (Activity recreation) cannot cut them; the webhook call stays on the UI `scope`.
-
-- [ ] **Step 1: Rewrite the AdminSheet release body**
-
-In `AdminSheet.kt`, replace the whole `scope.launch { … }` block (lines 96-151) with:
+Then replace the whole `scope.launch { … }` block (currently lines 96-151) with:
 
 ```kotlin
             scope.launch {
-                // Phase 1 — deliver the pending cuts to Wialon while this phone
-                // still owns the unit (before the webhook frees it). Runs on the
-                // application scope so an armband flip can't cut it.
+                // Preflight (review finding P1b): only deliver harvest if the
+                // registry STILL says this fingerprint owns the unit. Deliver runs
+                // before client.release(), i.e. before the authoritative ownership
+                // check — so without this, a reassigned unit (NotFound / bound_other)
+                // could receive cuts that belong to another device. If not owned,
+                // skip the send; count + strand still run (today's safe path).
                 status = "Delivering cuts…"
+                val owned = client.verify(id, fp) == VerifyResult.Bound
                 val snapshot = app.applicationScope.async {
-                    ProvisioningEvents.deliverBeforeRelease(app, id)
+                    ProvisioningEvents.deliverBeforeRelease(app, id, deliver = owned)
                 }.await()
 
                 // Shared by Success and NotFound: free the unit, then mark+strand
@@ -680,8 +740,8 @@ In `AdminSheet.kt`, replace the whole `scope.launch { … }` block (lines 96-151
                     ReleaseResult.Success -> finishRelease()
                     ReleaseResult.NotFound -> finishRelease()
                     ReleaseResult.AdminAuthFailed -> {
-                        // Cuts already delivered under the still-owned unit — safe
-                        // (they belong there). Binding stays; retry later.
+                        // If owned, cuts were delivered under the still-owned unit —
+                        // safe (they belong there). Binding stays; retry later.
                         rememberAdminFailure(releaseFailureMessage(release))
                         busy = false
                     }
@@ -694,9 +754,9 @@ In `AdminSheet.kt`, replace the whole `scope.launch { … }` block (lines 96-151
             }
 ```
 
-- [ ] **Step 2: Rewrite the PairingScreen ReleaseAndBind body**
+- [ ] **Step 8: Rewrite the PairingScreen ReleaseAndBind body (preflight verify + deliver-before-release)**
 
-In `PairingScreen.kt`, replace the `is PairingAdminAction.ReleaseAndBind -> { … }` block's `ReleaseResult.Success` arm (lines 305-335) so the deliver runs before `client.release()`:
+In `PairingScreen.kt`, ensure `VerifyResult` is imported (add `import com.klk.hams.provisioning.VerifyResult` if absent). Then replace the `is PairingAdminAction.ReleaseAndBind -> { … }` arm from its opening through the `else ->` line (currently lines 304-342, matching the existing structure) with:
 
 ```kotlin
                         is PairingAdminAction.ReleaseAndBind -> {
@@ -704,10 +764,12 @@ In `PairingScreen.kt`, replace the `is PairingAdminAction.ReleaseAndBind -> { �
                             // it. This is the release-then-rebind sequence that
                             // produced the 2026-07-10 mis-attribution defect; a row
                             // left pending here would upload under the unit claimed
-                            // below. Delivering first (still owned, lease held) and
-                            // stranding the remainder makes that impossible.
+                            // below. Delivering first (still owned) and stranding the
+                            // remainder makes that impossible. Preflight verify gates
+                            // the deliver on confirmed ownership (P1b).
+                            val owned = client.verify(action.ownedUnit, fp) == VerifyResult.Bound
                             val snapshot = app.applicationScope.async {
-                                ProvisioningEvents.deliverBeforeRelease(app, action.ownedUnit)
+                                ProvisioningEvents.deliverBeforeRelease(app, action.ownedUnit, deliver = owned)
                             }.await()
                             when (val release = client.release(action.ownedUnit, fp, code)) {
                                 ReleaseResult.Success -> {
@@ -736,14 +798,14 @@ In `PairingScreen.kt`, replace the `is PairingAdminAction.ReleaseAndBind -> { �
                                     adminAction = null
 ```
 
-(Leave the block's closing braces after line 342 as they are — you are replacing the opening of the `ReleaseAndBind` arm through the `else ->` line, matching the existing structure.)
+(Leave the block's closing braces after the `else ->` body as they are — you are replacing the opening of the `ReleaseAndBind` arm through the `else ->` line, matching the existing structure.)
 
-- [ ] **Step 3: Build to verify a green tree**
+- [ ] **Step 9: Build to verify a green tree**
 
 Run: `.\gradlew.bat :app:assembleDebug`
 Expected: BUILD SUCCESSFUL. `git grep -n flushAndRelease` must return nothing under `app/`.
 
-- [ ] **Step 4: Full unit suite + lint**
+- [ ] **Step 10: Full unit suite + lint**
 
 Run: `.\gradlew.bat :app:testDebugUnitTest`
 Expected: BUILD SUCCESSFUL, 0 failures (PushGateTest + ReleaseSequenceTest + updated frame tests + all pre-existing).
@@ -751,7 +813,7 @@ Expected: BUILD SUCCESSFUL, 0 failures (PushGateTest + ReleaseSequenceTest + upd
 Run: `.\gradlew.bat :app:lintDebug`
 Expected: 0 errors. Note any new warning above the 49 baseline.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 11: Commit (one green commit for the whole slice)**
 
 ```bash
 git add app/src/main/java/com/klk/hams/AppConfig.kt app/src/main/java/com/klk/hams/provisioning/ProvisioningEvents.kt app/src/main/java/com/klk/hams/ui/onboarding/AdminSheet.kt app/src/main/java/com/klk/hams/ui/onboarding/PairingScreen.kt app/src/test/java/com/klk/hams/provisioning/ReleaseSequenceTest.kt app/src/test/java/com/klk/hams/push/TelemetryFrameBuilderTest.kt
@@ -760,7 +822,7 @@ git commit -m "feat(provisioning): deliver cuts before strand at OTP release"
 
 ---
 
-### Task 6: Dictionary v1.6
+### Task 5: Dictionary v1.6
 
 **Files:**
 - Modify: `docs/HAMS_EVENT_CODE_DICTIONARY.md`
@@ -821,7 +883,7 @@ git commit -m "docs(event-codes): v1.6 — deliver-before-strand, lost_cuts only
 
 ## Device Verification
 
-Run on `ALI-NX1` after Task 6. The acceptance test is the before/after pair.
+Run on `ALI-NX1` after Task 5. The acceptance test is the before/after pair.
 
 - [ ] **DV1 — Wi-Fi-on release now delivers (the whole point).** Pair to a test unit, record 3 cuts, **do NOT wait** for the background push, immediately OTP-release. Before this change that produced `302 lost_cuts=3`. Now expect: a clean `304` on the unit, all 3 cuts delivered, admin sheet quiet. Confirm on device: `SELECT pushed, COUNT(*) FROM events WHERE event_code=179` → all `pushed=1`.
 - [ ] **DV2 — gateway-miss still strands (V7 equivalent).** Pair, record 3 cuts, **airplane mode ON** (n8n over `adb reverse`, Wialon unreachable), OTP-release. Expect: `302, lost_cuts=3`, all 3 cuts `pushed=2`, admin sheet says "3 cuts could not be delivered. Wialon did not confirm." No `lost_tasks` param in the frame.
