@@ -16,6 +16,7 @@ import com.klk.hams.provisioning.BindingDecision
 import com.klk.hams.provisioning.BindingRevalidator
 import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningStore
+import kotlinx.coroutines.sync.withLock
 
 /**
  * WorkManager worker that runs [PushEngine.run] on a background thread,
@@ -192,7 +193,11 @@ class PushWorker(
         )
 
         return try {
-            val result = engine.run()
+            // Serialise against the release-time deliver step (PushGate): the two
+            // must never send the same pending 179 concurrently, or Wialon
+            // double-counts the cut. The worker takes priority - it holds the lock
+            // for its whole drain; the deliver step tryLocks and skips if busy.
+            val result = PushGate.mutex.withLock { engine.run() }
             Log.d(TAG, "doWork: engine returned $result")
 
             // Per-task push_status sweep.
