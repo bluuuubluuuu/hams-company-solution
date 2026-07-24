@@ -147,8 +147,23 @@ The app re-checks its binding against the registry at launch, before every push,
 push), `not_found` (conservative - keep last-known-good, do not wipe). A **drain lease**
 (`units.drain_until` / `drain_fingerprint`, 5-min TTL) blocks other devices from claiming the unit
 while the departing phone flushes. Provisioning event codes: `301 binding_released`,
-`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind). `302` was removed -
-see `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.4. Plan: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`.
+`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind).
+
+**Deliver-before-strand (shipped 2026-07-24, device-verified DV1/DV2 on `ALI-NX1`).** A
+device-initiated OTP release delivers its pending cuts to Wialon under the unit still held, BEFORE
+stranding anything. Sequence: preflight `verify` (deliver only if this phone still owns the unit -
+no misfiling under a reassigned unit), a bounded single-attempt `PushEngine` drain
+(`AppConfig.DELIVER_BUDGET_MS`, ~15 s) serialised against the background worker via `PushGate` (no
+duplicate `179`), then `client.release()`, then count-what-did-not-land, marker, strand. Working
+network -> clean **`304`** (DV1). Delivery genuinely fails -> **`302 work_stranded`** with `lost_cuts`
+(DV2). Still-pending event rows are stranded (`pushed = 2`) **unconditionally**, whether or not the
+marker landed, so they can never upload under the next unit. `304` carries no params; `302` carries
+`lost_cuts` only (v1.6). **`302` is a local diagnostic, best-effort push** - it usually fires because
+Wialon was unreachable, so it usually cannot land; office visibility of stranded work is a future
+n8n-side count, not `302`. See `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.6. Plans:
+`docs/superpowers/plans/2026-07-07-binding-revalidation.md`,
+`docs/superpowers/plans/2026-07-23-work-stranded-302.md`,
+`docs/superpowers/plans/2026-07-23-deliver-before-strand.md`.
 
 Two admin workflows beyond the original four: `list-units` (read-only registry dump) and
 `admin-release` (office force-free a unit without the phone or an OTP).
