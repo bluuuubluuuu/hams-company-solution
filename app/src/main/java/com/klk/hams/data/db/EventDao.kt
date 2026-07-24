@@ -79,4 +79,31 @@ interface EventDao {
     // invariant ever breaks, a stranded task could read back as 'uploaded'.
     @Query("UPDATE events SET pushed = 2 WHERE pushed = 0")
     suspend fun strandAllPending(): Int
+
+    // --- Deliver-before-strand snapshot accounting (Approach A, 2026-07-23) ---
+
+    // The harvest snapshot taken BEFORE the release deliver step. Ordered like
+    // getPending so a partial deliver drains oldest-first.
+    @Query("SELECT id FROM events WHERE pushed = 0 AND event_code = 179 ORDER BY timestamp ASC, id ASC")
+    suspend fun pendingCutIds(): List<Long>
+
+    // Of the snapshot, how many did NOT reach Wialon (pushed != 1). Counts both
+    // still-queued (0) and rejected (2), so a PushEngine rejection can't hide as
+    // a clean 304. This is lost_cuts.
+    @Query("SELECT COUNT(*) FROM events WHERE id IN (:ids) AND pushed != 1")
+    suspend fun countNotUploadedAmong(ids: List<Long>): Int
+
+    // Distinct tasks among the not-uploaded snapshot ids - for the operator sheet
+    // ("N tasks / M cuts discarded"). Never goes on the wire.
+    @Query("SELECT COUNT(DISTINCT task_id) FROM events WHERE id IN (:ids) AND pushed != 1")
+    suspend fun countTasksNotUploadedAmong(ids: List<Long>): Int
+
+    // Guarded uploaded-mark (review finding P1a). Only 0 -> 1 is a valid ack
+    // transition. Without the `pushed = 0` guard, a PushWorker running
+    // concurrently with the release path could flip a just-stranded row
+    // (pushed = 2) back to 1 after the 302 already reported it lost, leaving
+    // inconsistent state. This makes the strand-vs-worker interleaving benign:
+    // once stranded, a row stays stranded.
+    @Query("UPDATE events SET pushed = 1 WHERE id = :id AND pushed = 0")
+    suspend fun markUploadedIfPending(id: Long)
 }
