@@ -296,11 +296,11 @@ An Android app that **replaces the MeiTrack P99L hardware GPS tracker** used by 
     -> SQLite: tasks table (one task per New Task session, counters updated)
 
 [Validated Wi-Fi connects - Task 2.8 design, spec docs/superpowers/specs/2026-05-08-push-and-wifi-design.md]
-  -> WorkManager OneTimeWorkRequest (NetworkType.UNMETERED) fires PushWorker
+  -> WorkManager OneTimeWorkRequest (NetworkType.CONNECTED by default; UNMETERED when PUSH_ALLOW_METERED=false) fires PushWorker
       (works even with the app fully closed/swiped/rebooted)
   -> PushWorker drains tasks where push_status='pending' only
       (active tasks are NEVER auto-saved by push; lifecycle stays
-       worker-controlled: NEW TASK 5s hold / app swipe / day rollover)
+       worker-controlled: NEW TASK 3s hold / app swipe / day rollover)
   -> Push engine reads outbound-approved pending rows (179, productive 180, 35)
   -> Batch TCP to 185.213.1.24:20332 (Wialon IPS v1.1)
   -> Each event = one #D# IPS message with 16 fields + params block
@@ -450,7 +450,7 @@ boundary later selects task-event codes 179, productive 180, and 35; the telemet
      location  = LocationStream.snapshotFlow.value (continuous BALANCED stream
                  owned app-scope; press path reads synchronously, never suspends.
                  Press is gated to GpsLockState.Locked, i.e. snapshot age
-                 <= AppConfig.LOCATION_STREAM_STALENESS_MS, default 5 s).
+                 <= AppConfig.LOCATION_STREAM_STALENESS_MS, default 10 s).
      battery   = BatteryManager.BATTERY_PROPERTY_CAPACITY
 3. Build Event object:
      - event_type (string, for UI/debug)
@@ -467,7 +467,7 @@ boundary later selects task-event codes 179, productive 180, and 35; the telemet
 
 GPS access is mandatory for counting. On app launch, request/check `ACCESS_FINE_LOCATION` and verify device location services are enabled. If permission is denied or location services are off, show a clear blocking message such as "GPS permission is required to record cuts" and close the app.
 
-Once the gate passes, the app starts an app-scoped continuous location stream (`LocationStream`, BALANCED priority, 2 s interval). The stream is held alive by ref-counted reasons: `"foreground"` (Activity resumed) and `"task_active"` (`HamsForegroundService` running). The press path reads `LocationStream.snapshotFlow.value` synchronously and never calls `getCurrentLocation`. The `+` and `-` buttons are disabled (`canIncrement` / `canDecrement` gate on `GpsLockState.Locked`) when the latest snapshot is `null` or older than `AppConfig.LOCATION_STREAM_STALENESS_MS` (default 5 s). The UI shows a persistent green/yellow GPS indicator so the user always knows whether the next press will record. No cut event ever lands without a coordinate fresher than the staleness threshold.
+Once the gate passes, the app starts an app-scoped continuous location stream (`LocationStream`, BALANCED priority, 2 s interval). The stream is held alive by ref-counted reasons: `"foreground"` (Activity resumed) and `"task_active"` (`HamsForegroundService` running). The press path reads `LocationStream.snapshotFlow.value` synchronously and never calls `getCurrentLocation`. The `+` and `-` buttons are disabled (`canIncrement` / `canDecrement` gate on `GpsLockState.Locked`) when the latest snapshot is `null` or older than `AppConfig.LOCATION_STREAM_STALENESS_MS` (default 10 s). The UI shows a persistent green/yellow GPS indicator so the user always knows whether the next press will record. No cut event ever lands without a coordinate fresher than the staleness threshold.
 
 Full design: `docs/superpowers/specs/2026-05-05-gps-streaming-design.md`.
 
@@ -476,7 +476,7 @@ Full design: `docs/superpowers/specs/2026-05-05-gps-streaming-design.md`.
 | Event | Android API | Notes |
 |--|--|--|
 | +/- press | Compose `Button.onClick` | Main thread; reads `LocationStream.snapshotFlow.value` synchronously, no suspend before the Room write. Button disabled unless `GpsLockState.Locked`. |
-| New task (281) | Custom 5-second long-press -> confirmation dialog | Two-stage to prevent accidental task loss |
+| New task (281) | Custom 3-second long-press -> confirmation dialog | Two-stage to prevent accidental task loss |
 | Auto-save kill | `Service.onTaskRemoved()` | **Synchronous local save - no coroutines.** System may kill process within ms. No outbound custom event_code for now. |
 | Auto-save Wi-Fi | First step of `PushEngine.start()` | Local task/save state only; no outbound custom event_code for now. |
 | Battery warn/crit | `BroadcastReceiver` on `Intent.ACTION_BATTERY_CHANGED` | Local edge detection; Wialon-visible battery uses the `battery` param. |
@@ -513,8 +513,8 @@ Store last-known battery bucket in `SharedPreferences` under `last_battery_bucke
 
 > **Authoritative spec:** `docs/superpowers/specs/2026-05-08-push-and-wifi-design.md`. The bullets below summarise; the spec governs.
 
-- **Trigger** (Task 2.8): `WorkManager` `OneTimeWorkRequest` with `setRequiredNetworkType(NetworkType.UNMETERED)`. Survives app close, swipe, reboot. Replaces the earlier `BroadcastReceiver` plan (Android 7+ no longer reliably delivers `CONNECTIVITY_ACTION` to manifest receivers, and a foreground-service-based watcher couldn't survive `onTaskRemoved`).
-- **Push target**: tasks with `push_status='pending'` only. Active tasks are insulated - push never finalizes them. Lifecycle is worker-controlled (NEW TASK 5s hold) or Android-lifecycle-controlled (app swipe -> `auto_killed`, day rollover -> `auto_rollover`, periodic in-process rollover at 1 s tick -> `auto_rollover`). The legacy `repo.autoSaveActiveOnWifi(...)` pre-flight hook is **deprecated** under the 2.8 spec.
+- **Trigger** (Task 2.8): `WorkManager` `OneTimeWorkRequest` with `setRequiredNetworkType(...)` - `NetworkType.CONNECTED` by default (`PUSH_ALLOW_METERED=true`, field feedback 2026-07-15), `UNMETERED` when the flag is false. Survives app close, swipe, reboot. Replaces the earlier `BroadcastReceiver` plan (Android 7+ no longer reliably delivers `CONNECTIVITY_ACTION` to manifest receivers, and a foreground-service-based watcher couldn't survive `onTaskRemoved`).
+- **Push target**: tasks with `push_status='pending'` only. Active tasks are insulated - push never finalizes them. Lifecycle is worker-controlled (NEW TASK 3s hold) or Android-lifecycle-controlled (app swipe -> `auto_killed`, day rollover -> `auto_rollover`, periodic in-process rollover at 1 s tick -> `auto_rollover`). The legacy `repo.autoSaveActiveOnWifi(...)` pre-flight hook is **deprecated** under the 2.8 spec.
 - **Modes**: auto (silent, notification only) and manual (5 s button hold + confirm; UI dims; status panel `Pending Wi-Fi -> Pushing -> Completed/Failed`; 30-min hard timeout in manual mode; cache always preserved).
 - **Batch size**: 10 messages per TCP session (`AppConfig.BATCH_SIZE`).
 - **Inter-message delay**: 50-100 ms (default 75 ms).
@@ -775,4 +775,4 @@ Karpathy guidelines plugin installed - apply all four principles (Think Before C
 
 --
 
-*Last updated: 2026-07-10 | Maintained by: WYH | Version: V6*
+*Last updated: 2026-07-24 | Maintained by: WYH | Version: V6*

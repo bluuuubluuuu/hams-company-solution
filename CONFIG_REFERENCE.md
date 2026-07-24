@@ -25,6 +25,16 @@ Copy `local.properties.example` → `local.properties` and fill in. **Never edit
 | `VERIFY_URL` | `<your n8n base>/webhook/verify` — device binding re-check (revalidation). Same n8n base as the two above. | 🔴 yours |
 | `IPS_HOST` / `IPS_PORT` | `185.213.1.24` / `20332` | 🟢 preset |
 
+## Compile-time tunables (in `app/src/main/java/com/klk/hams/AppConfig.kt`, not `local.properties`)
+These are Kotlin constants, changed by editing `AppConfig.kt` and rebuilding — not injected from `local.properties`. Listed here so operators know they exist.
+| Constant | Default | What it controls |
+|---|---|---|
+| `PUSH_ALLOW_METERED` | `true` | `true` = cuts upload over **any** network incl. mobile data / hotspot (`NetworkType.CONNECTED`); `false` = Wi-Fi-only (`UNMETERED`). Field feedback 2026-07-15: hotspot-only phones never uploaded on Wi-Fi-only. Trade-off: uploads spend mobile data (each cut is a tiny frame). |
+| `DELIVER_BUDGET_MS` | `15000` (~15 s) | Ceiling on the synchronous cut-delivery step at OTP release (deliver-before-strand). On timeout the release proceeds, counting what landed and stranding the rest. Raise if the field strands deliverable cuts on a healthy-but-slow link. |
+| `HEARTBEAT_INTERVAL_MINUTES` | `1` | Periodic beacon (`35`) cadence, active-task scoped. `0` disables. (Runtime-overridable via `heartbeat_interval_minutes` in SharedPreferences, range 5–60.) |
+| `BINDING_CHECK_INTERVAL_MINUTES` | `15` | Periodic binding re-check cadence (`BindingCheckWorker`). WorkManager floor is 15 min. |
+| `SQLITE_RETENTION_DAYS` | `30` | How long terminal-state (`uploaded`/`failed`/`discarded`) tasks and stranded rows are kept before the retention sweep deletes them. |
+
 ## Backend / admin values (not in the APK)
 | Name | Where | What | Kind |
 |---|---|---|---|

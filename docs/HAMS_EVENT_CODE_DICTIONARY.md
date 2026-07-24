@@ -1,7 +1,7 @@
 # HAMS V2 — Event Code Dictionary
 
-**Document Version:** 1.6
-**Last Updated:** 2026-07-23
+**Document Version:** 1.6a
+**Last Updated:** 2026-07-24
 **Status:** Canonical reference for all HAMS V2 event codes
 
 > **Source-of-truth note (v1.2, 2026-04-30):** `event_code` is an outbound
@@ -93,7 +93,7 @@ collision with any existing family.
 | **301** | `binding_released` — unit was freed by an admin (still unowned). Flushed with pending cuts before logout. | **Yes** (unit is free; safe) |
 | **302** | `work_stranded` — device unbound via OTP while still holding unsent harvest (`lost_cuts > 0`). Mutually exclusive with `304`: a release emits one or the other. Carries `lost_cuts` only (v1.6). | **Local diagnostic; best-effort push.** Pushed to the unit being left when Wialon is reachable, but a `302` most often fires *because* Wialon was unreachable — in which case it cannot land and the only record is local (`pushed = 2` on the phone). Do not rely on Wialon to surface `302`. |
 | **303** | `device_bound` — worker paired a device via OTP. Pushed to the just-bound unit at bind time (bind is online). | **Yes** |
-| **304** | `device_unbound` — worker released a device via OTP with no unsent harvest (`lost_cuts = 0`). Pushed to that unit before the binding clears (unbind is online); marked non-resendable if the gateway is unreachable. Carries `lost_tasks` and `lost_cuts`. | **Yes** |
+| **304** | `device_unbound` — worker released a device via OTP with no unsent harvest (`lost_cuts = 0`). Pushed to that unit before the binding clears (unbind is online); marked non-resendable if the gateway is unreachable. Carries **no params** (v1.6 — `304` = the code is the signal). | **Yes** |
 
 Rules:
 - The app self-unprovisions only on an explicit `released`/`bound_other`;
@@ -267,7 +267,7 @@ Battery and GPS anomaly signals. Satisfies the vendor's anti-mischarging and dat
 
 | Code | Name | Meaning | SQLite? | Push to Wialon? |
 |---|---|---|---|---|
-| 35 | Periodic beacon ("heartbeat" in HAMS code/UI) | Fixed-interval timer tick while HamsService is running. **Default 10 minutes. Configurable via `heartbeat_interval_minutes`.** Value 35 is verified from `Meitreck_p99l_protocol.pdf` § 1.3 as **"Track By Time Interval"** — semantically a periodic time-based position report, which matches HAMS's use. P99L's literal "Heartbeat" code is **31** (not used by HAMS). The HAMS code/UI label "heartbeat" is kept for ergonomics; the on-the-wire value 35 is the protocol-correct one for a periodic data beacon. | Yes | Yes, always |
+| 35 | Periodic beacon ("heartbeat" in HAMS code/UI) | Fixed-interval timer tick while HamsService is running. **Default 1 minute. Configurable via `heartbeat_interval_minutes` (revised Task 2.8, was 10).** Value 35 is verified from `Meitreck_p99l_protocol.pdf` § 1.3 as **"Track By Time Interval"** — semantically a periodic time-based position report, which matches HAMS's use. P99L's literal "Heartbeat" code is **31** (not used by HAMS). The HAMS code/UI label "heartbeat" is kept for ergonomics; the on-the-wire value 35 is the protocol-correct one for a periodic data beacon. | Yes | Yes, always |
 
 ### Total
 
@@ -414,7 +414,7 @@ meaningful Wialon messages without custom battery event codes.
 
 ### Rule 5 — Heartbeat is a fixed-interval timer while app is active
 
-> Event 35 fires every N minutes via `Handler.postDelayed`, where N is read from config key `heartbeat_interval_minutes`. Default: 10 minutes.
+> Event 35 fires every N minutes via `Handler.postDelayed`, where N is read from config key `heartbeat_interval_minutes`. Default: 1 minute (revised Task 2.8, was 10).
 
 **Important — heartbeats and presses are independent.** Pressing a button does not reset or cancel the heartbeat timer. The heartbeat fires on its own clock regardless of user activity. In a 10-minute window a busy worker might generate 50 press events plus 1 heartbeat — two separate rows written by two separate code paths.
 
@@ -569,10 +569,10 @@ gateway-miss limitation below). Stranded event rows are marked `pushed = 2` **un
 - **D12** — minus press push policy: push 180 only when `work_count > 0` after decrement
 - **D14** — new task (281) policy: SQLite only, never pushed to Wialon
 - **D15** — battery alert policy: local edge-triggered state only for now; battery level rides pushed 179/180/35 messages as a common param
-- **D16** — heartbeat policy: fixed-interval timer while HamsService foregrounded, default 10 min, configurable 5–60 min via `heartbeat_interval_minutes`, value 0 disables. Battery data rides every event row so heartbeats primarily serve idle periods.
+- **D16** — heartbeat policy: fixed-interval timer while HamsService foregrounded, default 1 min (revised Task 2.8, was 10), configurable 5–60 min via `heartbeat_interval_minutes`, value 0 disables. Battery data rides every event row so heartbeats primarily serve idle periods.
 
 See `docs/checkpoints/HAMS_API_TESTING.md` for full decision history.
 
 ---
 
-**Maintained by:** WYH | **Last reviewed:** 2026-04-30
+**Maintained by:** WYH | **Last reviewed:** 2026-07-24 (v1.6a)

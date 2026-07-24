@@ -264,7 +264,7 @@ Canonical policy is maintained in `docs/HAMS_EVENT_CODE_DICTIONARY.md`. Summary:
 
 - **179** — FFB cut / plus, verified against existing Ladang Landak Wialon notification rules
 - **180** — FFB correction / productive minus, verified against existing Ladang Landak Wialon notification rules
-- **35** — periodic beacon (P99L PDF § 1.3 calls this "Track By Time Interval"; HAMS code/UI labels it "heartbeat"). Configurable interval, default 10 min.
+- **35** — periodic beacon (P99L PDF § 1.3 calls this "Track By Time Interval"; HAMS code/UI labels it "heartbeat"). Configurable interval, default 1 min (revised Task 2.8, was 10).
 
 Diagnostics telemetry Option B codes (FINAL, 2026-07-02): **29** boot, **40**
 shutdown, **24** gps_lost, **25** gps_recovery, **41** stop_moving, **42**
@@ -508,7 +508,7 @@ These decisions were made during API testing (V6 checkpoint, 2026-04-23) and are
 | 6 | New task event (281) | — | **Local SQLite only, never pushed** | V6 D14 — empty task boundaries add no report value |
 | 7 | Battery reporting | Local display only | **`battery` param on every pushed event** | V6 adds supervisor battery visibility (vendor requirement) |
 | 8 | Battery threshold alerts | — | **Local edge state only for now; no custom Wialon event_code** | Battery rides task frames and approved diagnostics telemetry frames |
-| 9 | Heartbeat | — | **Event 35, default 10-min interval, configurable 5–60 min** | V6 D16 — battery visibility during idle periods |
+| 9 | Heartbeat | — | **Event 35, default 1-min interval (revised Task 2.8, was 10), configurable 5–60 min** | V6 D16 — battery visibility during idle periods |
 | 10 | Work counter | Not sent | **`work_count` param on every pushed event** | V6 — carries the current displayed/net task count |
 | 11 | event_code | Not possible | **Task frames: 179, 180, 35; diagnostics telemetry: final Option B** | HAMS-local legacy codes remain non-outbound; Option B telemetry codes are device + Wialon verified |
 | 12 | Coordinate format | DDMM.MMMM | **Unchanged** | Proven correct in V5 |
@@ -656,5 +656,5 @@ Do NOT apply these changes to the test unit in parallel with V5 app testing — 
 
 ---
 
-*Last updated: 2026-07-02 | Maintained by: WYH | Version: V6 event-code policy v1.3 + diagnostics telemetry Option B*
+*Last updated: 2026-07-24 | Maintained by: WYH | Version: V6 event-code policy v1.6 (deliver-before-strand) + diagnostics telemetry Option B*
 *Read alongside: CLAUDE.md, docs/HAMS_EVENT_CODE_DICTIONARY.md, docs/checkpoints/HAMS_API_TESTING.md, docs/HAMS_APP_REQUIREMENTS.md*
