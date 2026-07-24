@@ -147,12 +147,25 @@ The app re-checks its binding against the registry at launch, before every push,
 push), `not_found` (conservative — keep last-known-good, do not wipe). A **drain lease**
 (`units.drain_until` / `drain_fingerprint`, 5-min TTL) blocks other devices from claiming the unit
 while the departing phone flushes. Provisioning event codes: `301 binding_released`,
-`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind). A device-initiated OTP
-release emits `302 work_stranded` instead of `304` when the phone is leaving with unsent cuts; both
-markers carry `lost_tasks` / `lost_cuts`, and the still-pending event rows are stranded
-(`pushed = 2`) unconditionally so they can never upload under the next unit —
-see `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.5. Plans: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`,
-`docs/superpowers/plans/2026-07-23-work-stranded-302.md`.
+`303 device_bound`, `304 device_unbound` (pushed inline at OTP bind/unbind).
+
+**Deliver-before-strand (shipped 2026-07-24, device-verified DV1/DV2 on `ALI-NX1`).** A
+device-initiated OTP release now *delivers* its pending cuts to Wialon under the unit still being
+held — before anything is stranded. Sequence: preflight `verify` (deliver only if this phone still
+owns the unit — no misfiling under a reassigned unit), then a bounded single-attempt `PushEngine`
+drain (`AppConfig.DELIVER_BUDGET_MS`, ~15 s) serialised against the background worker via `PushGate`
+(no duplicate `179`), then `client.release()`, then count-what-did-not-land, marker, strand. On any
+working network the queue empties and the release is a clean **`304`** (DV1). Only when delivery
+genuinely fails does it emit **`302 work_stranded`** with `lost_cuts` (DV2). The still-pending event
+rows are stranded (`pushed = 2`) **unconditionally**, whether or not the marker reached the gateway,
+so they can never upload under the next unit. `304` carries no params; `302` carries `lost_cuts` only
+(`lost_tasks` dropped from the wire, v1.6). **`302` is a local diagnostic, best-effort push** — it
+most often fires *because* Wialon was unreachable, in which case it cannot land and the only record
+is local (`pushed = 2` on the phone). Do not rely on Wialon to surface `302`; office visibility of
+stranded work belongs to a future n8n-side count. See `docs/HAMS_EVENT_CODE_DICTIONARY.md` v1.6.
+Plans: `docs/superpowers/plans/2026-07-07-binding-revalidation.md`,
+`docs/superpowers/plans/2026-07-23-work-stranded-302.md`,
+`docs/superpowers/plans/2026-07-23-deliver-before-strand.md`.
 
 Two admin workflows beyond the original four: `list-units` (read-only registry dump) and
 `admin-release` (office force-free a unit without the phone or an OTP).

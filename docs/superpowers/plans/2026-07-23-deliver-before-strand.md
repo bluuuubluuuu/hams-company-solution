@@ -1,5 +1,13 @@
 # Deliver-Before-Strand (Approach A) Implementation Plan
 
+> **STATUS: SHIPPED 2026-07-24.** All 5 tasks implemented and committed on `feat/302-work-stranded`
+> (commits `d608dbc` PushGate, `22335c0` EventDao, `04e93f3` TaskRepository, `645f4a6` release flow,
+> `a49e40f` dictionary v1.6). 268 unit tests green, lint clean, Task 3 instrumented suite (21 tests)
+> passed on `ALI-NX1`. Review findings P1a (resurrection guard), P1b (preflight verify), P2 (atomic
+> Task 4) all folded before implementation. **Device-verified: DV1 (clean `304` delivery) and DV2
+> (gateway-miss `302` + local strand) both PASS on `ALI-NX1` 2026-07-24.** DV3–DV5 not run (covered
+> by unit tests + DV1/DV2; see Device Verification below).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** At a device-initiated OTP release, deliver the phone's pending cuts to Wialon under the unit it still owns *before* stranding anything, so a release on a working network loses no harvest and `302` fires only when the gateway was genuinely unreachable.
@@ -883,13 +891,13 @@ git commit -m "docs(event-codes): v1.6 — deliver-before-strand, lost_cuts only
 
 ## Device Verification
 
-Run on `ALI-NX1` after Task 5. The acceptance test is the before/after pair.
+Run on `ALI-NX1`. The acceptance test is the before/after pair. **DV1 and DV2 verified 2026-07-24.**
 
-- [ ] **DV1 — Wi-Fi-on release now delivers (the whole point).** Pair to a test unit, record 3 cuts, **do NOT wait** for the background push, immediately OTP-release. Before this change that produced `302 lost_cuts=3`. Now expect: a clean `304` on the unit, all 3 cuts delivered, admin sheet quiet. Confirm on device: `SELECT pushed, COUNT(*) FROM events WHERE event_code=179` → all `pushed=1`.
-- [ ] **DV2 — gateway-miss still strands (V7 equivalent).** Pair, record 3 cuts, **airplane mode ON** (n8n over `adb reverse`, Wialon unreachable), OTP-release. Expect: `302, lost_cuts=3`, all 3 cuts `pushed=2`, admin sheet says "3 cuts could not be delivered. Wialon did not confirm." No `lost_tasks` param in the frame.
-- [ ] **DV3 — no duplicate under concurrency.** Pair, record cuts, enable Wi-Fi so the background worker starts, then OTP-release within the same few seconds. Confirm in Wialon: each cut appears **once**, not twice.
-- [ ] **DV4 — rebind path (A1 regression).** Record cuts offline, then **Release and bind** straight to a different unit with Wi-Fi on. Confirm: cuts on the OLD unit (delivered by the deliver step), none on the new unit.
-- [ ] **DV5 — payload shape.** Confirm a `304` in Wialon has no `lost_*` params, and a `302` has `lost_cuts` only (no `lost_tasks`).
+- [x] **DV1 — Wi-Fi-on release now delivers (the whole point). PASS 2026-07-24.** Paired `HAMS_TEST_002`, recorded 3 cuts, released immediately. Wialon: 3 × `179` delivered + a clean `304` (no `lost_*` params). Device: all 3 events `pushed = 1`, task `uploaded`, zero rows at `pushed = 2`. The identical action on 2026-07-23 (old build) produced `302 lost_cuts=3` with the cuts destroyed — this is the exact before/after that proves Approach A.
+- [x] **DV2 — gateway-miss still strands. PASS 2026-07-24.** Paired `HAMS_TEST_003`, recorded 3 cuts, **airplane mode ON** (n8n over `adb reverse`, Wialon unreachable), released. Device: 3 × `179` at `pushed = 2`, a local `work_stranded` (302) row `lost_cuts=3` (`lost_tasks` NULL), task `failed`, **zero rows at `pushed = 0`** anywhere, device unpaired. Wialon received nothing (gateway down) — the `302` is held locally, confirming the "lose it rather than misfile it, keep a local record" promise.
+- [ ] **DV3 — no duplicate under concurrency.** NOT RUN. Covered by `PushGateTest` + the `withLock`-wait design (deliver waits for the worker, never sends concurrently). Lowest risk, hardest to stage.
+- [ ] **DV4 — rebind path (A1 regression).** NOT RUN. The strand + deliver-before-`client.release` ordering is unit-tested (`ReleaseSequenceTest`) and the same call-site pattern was device-verified on the prior `302` branch (V6). Worth running if a regression is ever suspected on the rebind path.
+- [x] **DV5 — payload shape.** CONFIRMED via DV1 + DV2: a `304` carried no `lost_*` params (DV1), a `302` carried `lost_cuts` only, no `lost_tasks` (DV2).
 
 ---
 

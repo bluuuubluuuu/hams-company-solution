@@ -1,8 +1,8 @@
 # Deliver-Before-Strand — Design
 
 **Date:** 2026-07-23
-**Status:** Proposal — approved direction (Approach A), awaiting implementation plan.
-**Mode:** Office-hours design output. No code written.
+**Status:** SHIPPED 2026-07-24 (Approach A). Implemented per `docs/superpowers/plans/2026-07-23-deliver-before-strand.md`, hardened for review findings P1a/P1b/P2, device-verified DV1 (clean `304` delivery) + DV2 (gateway-miss `302` + local strand) on `ALI-NX1`.
+**Mode:** Office-hours design output → eng-review → implementation.
 **Scope:** Android app only — the device-initiated release path. No backend, no n8n, no schema change.
 **Depends on:** `feat/302-work-stranded` (the `302`/`304` marker and the unconditional strand must already be in place — they are, 20 commits, V1–V6 verified on `ALI-NX1` 2026-07-23).
 
