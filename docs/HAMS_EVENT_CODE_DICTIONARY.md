@@ -141,23 +141,25 @@ Release-marker rules (`302` / `304`, 2026-07-23):
   (`HAMS_TEST_003`, 2026-07-09 02:32:57). Old `302`s carry no `lost_*` params;
   new ones always do. Filter on param presence or date-cut before 2026-07-23.
 
-Known limitations (shipped deliberately, 2026-07-23):
+Known limitations (shipped deliberately; current as of deliver-before-strand, 2026-07-24):
 
-- **A gateway miss destroys the harvest silently.** If the marker does not land,
-  the rows are stranded anyway and there is **no Wialon receipt** for the release.
-  Both call sites (`AdminSheet`, `PairingScreen`) discard `flushAndRelease`'s
-  return value, so the operator gets no on-screen signal. The only record is
-  local: the release diagnostics row left at `pushed = 2` plus the stranded event
-  rows, readable by a DB pull and retained for `AppConfig.SQLITE_RETENTION_DAYS`.
-  Reconciliation against Wialon will therefore show fewer release markers than
-  actual releases.
+- **A gateway miss leaves no Wialon receipt.** If Wialon is unreachable at release
+  (the common cause of a `302`), the marker cannot land — Wialon shows nothing.
+  The cuts are stranded anyway (`pushed = 2`) so no harvest misfiles, but the only
+  record is local: the release diagnostics row at `pushed = 2` plus the stranded
+  event rows, readable by a DB pull and retained for
+  `AppConfig.SQLITE_RETENTION_DAYS`. Reconciliation against Wialon will show fewer
+  release markers than actual releases. The operator *is* told on-screen —
+  `AdminSheet` reports "N cuts could not be delivered. Wialon did not confirm." —
+  but the office has no remote signal until a future n8n-side count reports
+  `lost_cuts` through the release webhook (see the `provisioning_events` next
+  phase). This is why `302` is a **local diagnostic**, not a reliable Wialon alert.
 - **A `+` press during the release window is stranded but not counted.** The
-  counts are taken before the marker is pushed and the strand happens after, so a
-  cut recorded in between is destroyed without appearing in `lost_cuts` — the
+  snapshot + counts are taken around the deliver step and the strand happens after,
+  so a cut recorded in between is stranded without appearing in `lost_cuts` — the
   receipt under-reports by that amount. The window is narrow (the admin holds the
-  phone, the sheet is modal) and the behaviour is deliberate: bounding the strand
-  to the counted rows would leave that row pending, to be misfiled onto the next
-  unit instead.
+  phone, the sheet is modal) and deliberate: bounding the strand to the counted
+  rows would leave that row pending, to be misfiled onto the next unit instead.
 
 ---
 
