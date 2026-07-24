@@ -1,6 +1,6 @@
 # HAMS V2 — Event Code Dictionary
 
-**Document Version:** 1.5
+**Document Version:** 1.6
 **Last Updated:** 2026-07-23
 **Status:** Canonical reference for all HAMS V2 event codes
 
@@ -13,7 +13,7 @@
 
 ---
 
-## All Event Codes at a Glance (master reference — v1.5, 2026-07-23)
+## All Event Codes at a Glance (master reference — v1.6, 2026-07-23)
 
 Every code the app knows, grouped. "Pushed?" = sent to Wialon in the `event_code`
 param. Local-only codes live in SQLite for audit/UI and are never pushed.
@@ -34,9 +34,9 @@ param. Local-only codes live in SQLite for audit/UI and are never pushed.
 | **43** | Power connected | Diagnostics | **Yes** |
 | **44** | Power disconnected | Diagnostics | **Yes** |
 | **301** | `binding_released` (admin freed → phone flushes + logs out) | Provisioning (3xx) | **Yes** |
-| **302** | `work_stranded` (OTP release while holding unsent cuts) | Provisioning (3xx) | **Yes** |
+| **302** | `work_stranded` (OTP release; cuts could not be delivered) — carries `lost_cuts` | Provisioning (3xx) | **Yes** |
 | **303** | `device_bound` (OTP pair) | Provisioning | **Yes** |
-| **304** | `device_unbound` (OTP release with no unsent cuts) | Provisioning | **Yes** |
+| **304** | `device_unbound` (OTP release; all cuts delivered) — no params | Provisioning | **Yes** |
 | **281** | New task created | Local lifecycle | No |
 | **283** | Auto-save on kill (`onTaskRemoved`) | Local lifecycle | No |
 | **284** | Auto-save pre-push | Local lifecycle | No |
@@ -112,28 +112,23 @@ Rules:
 
 Release-marker rules (`302` / `304`, 2026-07-23):
 
-- **`304` no longer counts all unbinds.** After 2026-07-23 a device-initiated
-  release emits `302` when it leaves harvest behind and `304` when it does not.
-  **Total device-initiated releases = `302` + `304`** (a lower bound — see the
-  gateway-miss limitation below). A report counting only `304` silently omits
-  every problem release. Admin-side frees (`301 binding_released`) are a
-  separate release path and are not part of this sum.
-- **Both release markers carry `lost_tasks` and `lost_cuts`** (integers, IPS
-  param type `1`). The routing is on cuts alone, so on a `304` `lost_cuts` is
-  **always 0** — a positive assertion that no harvest was left, not an absence.
-  `lost_tasks` on a `304` **may be non-zero**: a task whose cuts all uploaded but
-  whose heartbeat beacon is still pending yields `304 lost_tasks=1, lost_cuts=0`,
-  meaning *"no harvest lost, but a task still holds an unsent beacon."* `301` and
-  `303` carry neither param: `301` is recorded before its flush runs, so any count
-  taken then is stale by design.
-- **`lost_cuts` counts `event_code = 179` rows only** (`pushed = 0`), matching the
-  harvest rule ("count rows where `ffb_cut = 1`"). It is not `SUM(net_count)` —
-  those diverge whenever a worker uses `−`. Counting the whole pushable set would
-  let heartbeats dominate.
-- **`lost_tasks` is `COUNT(DISTINCT task_id)` over rows with `pushed = 0`** — it
-  spans `179`/`180`/`35` alike, which is why it can exceed the tasks implied by
-  `lost_cuts` and can be non-zero when `lost_cuts` is 0. Already-stranded work
-  (`pushed = 2`) is excluded, so a later release never re-reports it.
+- **`302` carries `lost_cuts` only; `304` carries no params.** As of the
+  deliver-before-strand change (2026-07-23), a release first delivers pending
+  cuts under the unit being left, then counts what did not land. `302` fires only
+  when `lost_cuts > 0` and carries that one integer. `304` means everything was
+  delivered — the code is the signal, no param. `lost_tasks` is no longer sent on
+  the wire (it triggered nothing and the beacon-only case made `304 lost_tasks=1`
+  read as a false alarm).
+- **`lost_cuts` counts snapshot `179` rows that did not upload** (`pushed != 1`
+  after the deliver step), matching the harvest rule. A cut the gateway rejected
+  counts as lost, not as a clean `304`.
+- **`302` is now rare.** On any working network the deliver step empties the queue
+  and the release is a clean `304`. `302` means the Wialon gateway was genuinely
+  unreachable at release time (or, on an ack-timeout, over-reports a cut that
+  actually landed — never under-reports).
+- **Historical `302` payloads.** `binding_taken` `302`s (pre-2026-07-07) carry no
+  params. `work_stranded` `302`s from 2026-07-23 carry `lost_tasks` AND `lost_cuts`
+  (v1.5). From v1.6 they carry `lost_cuts` only. Filter by date, not param shape.
 - **The strand is unconditional.** On every device-initiated release, every still
   pending event row is marked `pushed = 2` (permanently non-sendable) whether or
   not the marker reached the gateway. The Wialon unit id is a login credential in
@@ -561,6 +556,7 @@ behaviour.
 | 1.4 | 2026-07-07 | Added the provisioning 3xx family: `301 binding_released` (admin free → flush + logout), `303 device_bound` and `304 device_unbound` (pushed inline at OTP bind/unbind — both inherently online). Removed `302 binding_taken` (was phone-local only); `bound_other` now stops + logs out with no push, diagnosed server-side. Added the "All Event Codes at a Glance" master table. Field-verified live 2026-07-07 (301/303/304 confirmed in Wialon). |
 | 1.5 | 2026-07-23 | **Code-verified only (264 unit tests); device verification for this branch has not yet been run.** Reassigned `302` to `work_stranded` — emitted at a device-initiated OTP release when the phone leaves with unsent cuts, mutually exclusive with `304`. Both release markers now carry `lost_tasks` / `lost_cuts` params (type `1`); routing is on cuts alone, so `304` always reports `lost_cuts = 0` but may report a non-zero `lost_tasks` (a task holding only an unsent beacon). **Total device-initiated releases = `302` + `304`** (a lower bound — see the
 gateway-miss limitation below). Stranded event rows are marked `pushed = 2` **unconditionally** — whether or not the marker reached the gateway — so they can never later push under the next unit. `ReleaseResult.NotFound` now emits a marker too (was silent). Note: historical `binding_taken` `302`s exist on test units and carry no `lost_*` params. |
+| 1.6 | 2026-07-23 | Deliver-before-strand: a release now delivers pending cuts under the unit being left before stranding, so `302` fires only on genuine gateway failure. Payload trimmed — `302` carries `lost_cuts` only, `304` carries no params, `lost_tasks` dropped from the wire. |
 
 ---
 
