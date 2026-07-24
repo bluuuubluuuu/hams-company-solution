@@ -44,6 +44,7 @@ import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
+import com.klk.hams.provisioning.VerifyResult
 import com.klk.hams.ui.theme.FieldForest
 import com.klk.hams.ui.theme.FieldForestOn
 import com.klk.hams.ui.theme.FieldHairline
@@ -302,6 +303,10 @@ fun PairingScreen(
                             }
                         }
                         is PairingAdminAction.ReleaseAndBind -> {
+                            val owned = client.verify(action.ownedUnit, fp) == VerifyResult.Bound
+                            val snapshot = app.applicationScope.async {
+                                ProvisioningEvents.deliverBeforeRelease(app, action.ownedUnit, deliver = owned)
+                            }.await()
                             when (val release = client.release(action.ownedUnit, fp, code)) {
                                 ReleaseResult.Success -> {
                                     // 302/304 for the unit we just released, BEFORE
@@ -309,7 +314,7 @@ fun PairingScreen(
                                     // sequence that produced the A1 mis-attribution
                                     // defect (2026-07-10): any row left pending here
                                     // would push under the unit claimed on the next
-                                    // line. flushAndRelease strands them instead.
+                                    // line. The release path strands them instead.
                                     //
                                     // Runs on the application scope so an Activity
                                     // recreation (armband flip — sensorPortrait, no
@@ -318,7 +323,7 @@ fun PairingScreen(
                                     // the ordering: no manualClaim until the release
                                     // sequence has fully completed.
                                     app.applicationScope.async {
-                                        ProvisioningEvents.flushAndRelease(app, action.ownedUnit)
+                                        ProvisioningEvents.markAndStrand(app, action.ownedUnit, snapshot)
                                     }.await()
                                     when (val bind = client.manualClaim(unitId, fp, code)) {
                                     is BindResult.Success -> completePairing(bind.uniqueId)

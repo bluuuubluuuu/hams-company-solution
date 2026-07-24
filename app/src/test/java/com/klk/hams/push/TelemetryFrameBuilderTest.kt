@@ -58,7 +58,7 @@ class TelemetryFrameBuilderTest {
         assertTrue(IPSFrameBuilder.telemetryFrame(row).isFailure)
     }
 
-    @Test fun workStranded_frame_carriesLostParams() {
+    @Test fun workStranded_frame_carriesLostCutsOnly() {
         val row = DiagnosticEntity(
             id = 4,
             type = "work_stranded",
@@ -71,7 +71,7 @@ class TelemetryFrameBuilderTest {
             hdop = 1.5,
             satellites = 8,
             speedKmh = 0,
-            lostTasks = 3,
+            lostTasks = null,
             lostCuts = 47,
         )
 
@@ -79,13 +79,12 @@ class TelemetryFrameBuilderTest {
 
         assertEquals(
             "#D#230726;011706;0216.1233;N;10316.9791;E;0;0;10;8;1.5;0;0;;NA;" +
-                "event_code:1:302,battery:2:78.00,work_count:1:0," +
-                "lost_tasks:1:3,lost_cuts:1:47\r\n",
+                "event_code:1:302,battery:2:78.00,work_count:1:0,lost_cuts:1:47\r\n",
             frame,
         )
     }
 
-    @Test fun deviceUnbound_clean_carriesZeroLostParams() {
+    @Test fun deviceUnbound_clean_carriesNoLostParams() {
         val row = DiagnosticEntity(
             id = 5,
             type = "device_unbound",
@@ -98,14 +97,16 @@ class TelemetryFrameBuilderTest {
             hdop = 1.5,
             satellites = 8,
             speedKmh = 0,
-            lostTasks = 0,
-            lostCuts = 0,
+            lostTasks = null,
+            lostCuts = null,
         )
 
         val frame = IPSFrameBuilder.telemetryFrame(row).getOrThrow()
 
         assertTrue(frame.contains("event_code:1:304"))
-        assertTrue(frame.contains("lost_tasks:1:0,lost_cuts:1:0"))
+        assertTrue(frame.contains("lost_tasks").not())
+        assertTrue(frame.contains("lost_cuts").not())
+        assertTrue(frame.endsWith("work_count:1:0\r\n"))
     }
 
     @Test fun otherCodes_haveNoLostParams() {

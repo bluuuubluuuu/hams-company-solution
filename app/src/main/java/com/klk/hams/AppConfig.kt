@@ -109,6 +109,9 @@ object AppConfig {
     // Manual push session config (Task 2.8 spec).
     const val PUSH_MANUAL_TIMEOUT_MS: Long = 30L * 60_000L
 
+    /** Ceiling on the synchronous cut-delivery step at OTP release. */
+    const val DELIVER_BUDGET_MS: Long = 15_000L
+
     /**
      * Whether cut-data push may run on ANY connection (mobile data, tethering,
      * phone hotspot) — not only unmetered Wi-Fi.

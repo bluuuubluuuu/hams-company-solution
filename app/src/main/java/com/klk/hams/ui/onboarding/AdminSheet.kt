@@ -32,6 +32,7 @@ import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
+import com.klk.hams.provisioning.VerifyResult
 import com.klk.hams.ui.theme.FieldForest
 import com.klk.hams.ui.theme.FieldForestOn
 import com.klk.hams.ui.theme.FieldHairline
@@ -96,6 +97,12 @@ fun AdminSheet(
             scope.launch {
                 // Shared by Success and NotFound: both end the binding, so both
                 // must flush the marker under the OLD unit before store.clear().
+                status = "Delivering cuts..."
+                val owned = client.verify(id, fp) == VerifyResult.Bound
+                val snapshot = app.applicationScope.async {
+                    ProvisioningEvents.deliverBeforeRelease(app, id, deliver = owned)
+                }.await()
+
                 suspend fun finishRelease() {
                     // Durable half runs on the application scope: an armband flip
                     // recreates MainActivity and cancels `scope`, and a sequence cut
@@ -103,14 +110,14 @@ fun AdminSheet(
                     // harvest onto the next unit or destroys it while still bound.
                     // Only the await below is cancellable.
                     val outcome = app.applicationScope.async {
-                        val o = ProvisioningEvents.flushAndRelease(app, id)
+                        val o = ProvisioningEvents.markAndStrand(app, id, snapshot)
                         store.clear()
                         o
                     }.await()
 
                     val lost = outcome.lost
-                    val discarded = if (lost.tasks > 0 || lost.cuts > 0) {
-                        "Released. ${lost.tasks} tasks / ${lost.cuts} cuts discarded (never uploaded)."
+                    val discarded = if (lost.cuts > 0) {
+                        "Released. ${lost.cuts} cuts could not be delivered."
                     } else {
                         null
                     }
@@ -132,6 +139,7 @@ fun AdminSheet(
                     }
                 }
 
+                status = "Confirming release..."
                 when (val release = client.release(id, fp, adminCode)) {
                     ReleaseResult.Success -> finishRelease()
                     // 404/409 — not found, or not the owner. The binding still ends

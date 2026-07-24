@@ -53,7 +53,7 @@ class BindingRevalidator(
      * `pushed = 0` when the binding is dropped uploads under whatever unit this
      * handset binds to next, crediting one worker's harvest to another. The
      * ranking the human set: misfiling harvest onto the wrong worker is worse
-     * than losing it. Same guarantee [ProvisioningEvents.flushAndRelease] gives
+     * than losing it. The OTP release paths enforce the same guarantee.
      * the device-initiated OTP paths — this is the server-initiated twin
      * (`bound_other`, and the belt-and-braces call after a released-flush).
      */
