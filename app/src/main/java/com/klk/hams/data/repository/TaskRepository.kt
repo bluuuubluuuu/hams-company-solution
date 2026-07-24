@@ -507,9 +507,18 @@ class TaskRepository(
         stranded
     }
 
+    suspend fun pendingCutIds(): List<Long> = eventDao.pendingCutIds()
+
+    suspend fun lostAmong(snapshotIds: List<Long>): UnsentWork = UnsentWork(
+        tasks = eventDao.countTasksNotUploadedAmong(snapshotIds),
+        cuts = eventDao.countNotUploadedAmong(snapshotIds),
+    )
+
     /** Marks an event as successfully uploaded. */
     suspend fun markEventUploaded(eventId: Long) {
-        eventDao.markPushed(listOf(eventId), 1)
+        // Guarded: a row stranded by the release path (pushed = 2) must not
+        // be flipped back by a late worker acknowledgement.
+        eventDao.markUploadedIfPending(eventId)
     }
 
     /**

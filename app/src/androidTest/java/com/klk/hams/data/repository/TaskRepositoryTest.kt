@@ -355,6 +355,67 @@ class TaskRepositoryTest {
         assertNull(taskById(taskId, "failed"))
     }
 
+    // ---- Approach A - snapshot accounting (2026-07-23) ----
+
+    @Test fun pendingCutIds_returnsOnly179AtPushedZero() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 1, eventCode = 179)   // already delivered
+        insertEvent(taskA, pushed = 0, eventCode = 35)    // beacon, not a cut
+
+        val snapshot = repo.pendingCutIds()
+
+        assertEquals(2, snapshot.size)   // the two pushed=0 179 rows only
+    }
+
+    @Test fun lostAmong_countsSnapshotCutsNotUploaded_afterDeliver() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+
+        val snapshot = repo.pendingCutIds()               // taken BEFORE deliver
+        assertEquals(3, snapshot.size)
+
+        // Simulate the deliver outcome using the ids the snapshot actually returned
+        // (no id arithmetic): one delivered, one rejected, one left un-sent.
+        repo.markEventUploaded(snapshot[0])               // pushed -> 1 (delivered)
+        repo.markEventRejected(snapshot[1], "frame rejected")  // pushed -> 2 (lost)
+        // snapshot[2] stays pushed=0 (timed out mid-deliver) -> lost
+
+        val lost = repo.lostAmong(snapshot)
+
+        assertEquals(2, lost.cuts)    // rejected + still-unsent count as lost; delivered does not
+        assertEquals(1, lost.tasks)
+    }
+
+    @Test fun lostAmong_emptySnapshot_isZero() = runBlocking {
+        val lost = repo.lostAmong(emptyList())
+        assertEquals(0, lost.cuts)
+        assertEquals(0, lost.tasks)
+    }
+
+    @Test fun markEventUploaded_doesNotResurrectAStrandedRow() = runBlocking {
+        // Review finding P1a: a stranded row (pushed=2) must never flip to 1 on a
+        // late worker ack. The guarded query only moves 0 -> 1.
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 2, eventCode = 179)   // already stranded
+        val strandedId = db.eventDao().pendingCutIds()     // empty - it's not pending
+        assertEquals(0, strandedId.size)
+
+        // Find the stranded row's id and try to mark it uploaded.
+        val id = db.eventDao().let {
+            // the only event we inserted; id is 1 in a fresh in-memory db
+            1L
+        }
+        repo.markEventUploaded(id)
+
+        // It stays stranded - the guard blocked the 2 -> 1 transition.
+        val lost = repo.lostAmong(listOf(id))
+        assertEquals(1, lost.cuts)   // still counted as not-uploaded
+    }
+
     // ---- helpers ----
 
     private fun pushedStateOf(eventId: Long): Int =
