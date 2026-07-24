@@ -34,7 +34,7 @@ param. Local-only codes live in SQLite for audit/UI and are never pushed.
 | **43** | Power connected | Diagnostics | **Yes** |
 | **44** | Power disconnected | Diagnostics | **Yes** |
 | **301** | `binding_released` (admin freed → phone flushes + logs out) | Provisioning (3xx) | **Yes** |
-| **302** | `work_stranded` (OTP release; cuts could not be delivered) — carries `lost_cuts` | Provisioning (3xx) | **Yes** |
+| **302** | `work_stranded` (OTP release; cuts could not be delivered) — carries `lost_cuts` | Provisioning (3xx) | **Local diagnostic** (best-effort push) |
 | **303** | `device_bound` (OTP pair) | Provisioning | **Yes** |
 | **304** | `device_unbound` (OTP release; all cuts delivered) — no params | Provisioning | **Yes** |
 | **281** | New task created | Local lifecycle | No |
@@ -91,7 +91,7 @@ collision with any existing family.
 | Code | Meaning | Pushed to Wialon? |
 |---|---|---|
 | **301** | `binding_released` — unit was freed by an admin (still unowned). Flushed with pending cuts before logout. | **Yes** (unit is free; safe) |
-| **302** | `work_stranded` — device unbound via OTP while still holding unsent harvest (`lost_cuts > 0`). Mutually exclusive with `304`: a release emits one or the other. Carries `lost_tasks` and `lost_cuts`. | **Yes** (pushed to the unit being left, before the binding clears) |
+| **302** | `work_stranded` — device unbound via OTP while still holding unsent harvest (`lost_cuts > 0`). Mutually exclusive with `304`: a release emits one or the other. Carries `lost_cuts` only (v1.6). | **Local diagnostic; best-effort push.** Pushed to the unit being left when Wialon is reachable, but a `302` most often fires *because* Wialon was unreachable — in which case it cannot land and the only record is local (`pushed = 2` on the phone). Do not rely on Wialon to surface `302`. |
 | **303** | `device_bound` — worker paired a device via OTP. Pushed to the just-bound unit at bind time (bind is online). | **Yes** |
 | **304** | `device_unbound` — worker released a device via OTP with no unsent harvest (`lost_cuts = 0`). Pushed to that unit before the binding clears (unbind is online); marked non-resendable if the gateway is unreachable. Carries `lost_tasks` and `lost_cuts`. | **Yes** |
 
