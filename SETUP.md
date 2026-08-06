@@ -79,7 +79,7 @@ non-zero). The app closes on launch if location permission is denied or services
 > - **`psql`** client installed.
 > - 🔴 The **`HAMS_CLAIM_SECRET`** you chose in §1 (you'll enter the same value on the n8n side).
 
-The full, node-by-node procedure — apply the SQL, run n8n, import/build the 4 workflows, set the
+The full, node-by-node procedure — apply the SQL, run n8n, import/build the 7 workflows, set the
 Postgres credential, publish the webhooks, and test with `curl` — lives in its own guide:
 
 ➡️ **[provisioning/BUILD_ADMIN_BACKEND.md](provisioning/BUILD_ADMIN_BACKEND.md)**
@@ -212,7 +212,7 @@ In the Wialon UI: Unit list → open the unit → **Unit Properties → Main tab
 
 Verify server-side:
 ```
-psql $env:PROV_DB_URL -c "SELECT unique_id, claimed, device_fingerprint FROM units WHERE unique_id='HAMS_TEST_001';"
+psql $env:PROV_DB_URL -c "SELECT unique_id, claimed, device_fingerprint FROM \"G_PM_IT_IOT_HAMS_UNITS\" WHERE unique_id='HAMS_TEST_001';"
 ```
 `claimed=true`, `device_fingerprint` = the phone's `ANDROID_ID` (`adb shell settings get secure android_id`).
 

@@ -47,7 +47,7 @@ prefixing them would force an edit to every workflow JSON.
 | N-08 | **Routine parameters:** prefix `p_`; local variables: prefix `v_` | `p_unique_id`, `v_owner` | Prevents a parameter shadowing a column of the same name — a real and silent bug class. | |
 | N-09 | **Indexes:** `"<PREFIX>_IDX_<TABLE>_<PURPOSE>"` — quoted UPPERCASE, prefixed | `"G_PM_IT_IOT_HAMS_IDX_UNITS_FREE"` | Same namespace as tables in Postgres, so same rule. Purpose, not column list. | |
 | N-10 | **Migration files:** `NNN_subject.sql`, three-digit, monotonic, applied in order, **never edited after they have been applied anywhere** | `001_units.sql` … `008_admin_release.sql` | An applied migration is history. Corrections go in a new file. | |
-| N-11 | **Unit identifiers:** `<site code>_H<3-digit sequence>` | `OC154_H001`; test units `HAMS_TEST_001` | *(inferred from examples — this is the rule most in need of an HQ ruling, since it encodes estate coding.)* | |
+| N-11 | **Unit identifiers:** `OC<3-digit OC code>_H_<handset serial>` | `OC003_H_1719377c`; legacy test units `HAMS_TEST_001` | Adopted 2026-08-05, replacing `<site code>_H<3-digit sequence>` (`OC154_H001`). The serial ties the unit id to a physical handset for traceability. **Trade-off HQ should weigh:** because the id names a specific phone, replacing a handset needs a new Wialon unit and a new registry row, and that worker's history then spans two unit ids. The alternative — a plain sequence plus a separate `serial_no` column — keeps Wialon history continuous. | |
 
 ---
 

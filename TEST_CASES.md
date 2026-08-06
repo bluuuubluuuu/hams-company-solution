@@ -29,7 +29,7 @@ Prerequisite: backend built and published ([BUILD_ADMIN_BACKEND.md](provisioning
 |---|---|---|
 | TC-BE-01 | `POST /webhook/manual-claim` with **no** `x-hams-key` | `401 {"error":"unauthorized"}` |
 | TC-BE-02 | `POST /webhook/manual-claim`, correct key, **bad** OTP | `401 {"error":"admin_auth_failed"}` |
-| TC-BE-03 | `POST /webhook/manual-claim`, correct key + valid OTP, free unit 🔴 | `200 {"unique_id":…}`; `units` row now `claimed=true` with your fingerprint |
+| TC-BE-03 | `POST /webhook/manual-claim`, correct key + valid OTP, free unit 🔴 | `200 {"unique_id":…}`; `"G_PM_IT_IOT_HAMS_UNITS"` row now `claimed=true` with your fingerprint |
 | TC-BE-04 | Repeat TC-BE-03 for a unit owned by **another** device | `409 {"error":"already_bound"}` |
 | TC-BE-05 | Claim a **second** unit from a device that already owns one | `409 {"error":"fingerprint_in_use","on":…}` |
 | TC-BE-06 | Claim an **unknown** unit id | `404 {"error":"not_found"}` |

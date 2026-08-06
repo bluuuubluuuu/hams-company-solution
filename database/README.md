@@ -25,7 +25,7 @@ physical phone is allowed to report as which Wialon unit. It is an equipment reg
                                                                           (separate system)
 ```
 
-Two tables, 14 columns, 8 routines, roughly one row per company handset. It does not grow with
+Two tables, 15 columns, 8 routines, roughly one row per company handset. It does not grow with
 harvest activity — a phone that records 10,000 cuts adds zero rows.
 
 **Not stored anywhere here:** cut counts, GPS coordinates, worker names, employee numbers, wages,
@@ -77,7 +77,7 @@ columns are unchanged.
 
 | Folder | Names | Used by |
 |---|---|---|
-| `../provisioning/sql/` | `units`, `admin_otp` | our running dev instance |
+| `../provisioning/sql/` | `units`, `admin_otp` (lowercase - dev only) | our running dev instance |
 | `database/sql/` **(this folder)** | `"G_PM_IT_IOT_HAMS_UNITS"`, `"G_PM_IT_IOT_HAMS_ADMIN_OTP"` | the SOP deployment |
 
 Run [`sql/hams_setup.sql`](sql/hams_setup.sql) once on a fresh database — it is the 7 numbered

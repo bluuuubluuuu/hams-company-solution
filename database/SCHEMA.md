@@ -3,7 +3,7 @@
 Every table and column currently in the provisioning database, with its type. Types shown are the
 PostgreSQL types in use today; the SQL Server equivalents are at the bottom.
 
-**Total footprint: 2 tables, 14 columns, 8 routines, 1 index.** The register does not grow with
+**Total footprint: 2 tables, 15 columns, 8 routines, 1 index.** The register does not grow with
 harvest activity — one row per company handset.
 
 > **Naming (SOP).** Tables and indexes are **quoted UPPERCASE** with the `G_PM_IT_IOT_HAMS_` prefix.
@@ -26,6 +26,7 @@ account, never by a phone.
 | `device_fingerprint` | `TEXT` | yes | — | **UNIQUE** | The Android hardware id of the phone that claimed this unit. Proof of ownership: only the phone presenting this exact value may push as this unit or release it. `NULL` when free. The UNIQUE constraint stops one phone claiming two units. **The one sensitive column** — it identifies a handset, not a person. |
 | `status` | `TEXT` | no | `'active'` | *(none — see note)* | Lifecycle of the *unit*: `'active'` in service, `'retired'` withdrawn. No routine sets `'retired'`; it is administrative. |
 | `last_seen` | `TIMESTAMPTZ` | yes | — | — | Last time this phone contacted the server — set on pairing, refreshed on each binding re-check (~every 15 min while online). Lets an admin see whether a handset is alive. |
+| `app_version` | `TEXT` | yes | — | — | The APK version this handset last reported, so the office can answer "is every phone on the current build?". Written by `check_binding` **only on a `bound` answer**, so a device that does not own the unit cannot write to it. `NULL` until the phone's first check-in after pairing — `manual_claim` deliberately does not set it. |
 | `created_at` | `TIMESTAMPTZ` | no | `now()` | — | When the unit was first seeded. Audit only. |
 | `updated_at` | `TIMESTAMPTZ` | no | `now()` | — | Last modification, by any routine. Audit only. Set explicitly by each routine — **not** by a trigger. |
 | `drain_until` | `TIMESTAMPTZ` | yes | — | — | Expiry of the 5-minute "drain lease". `NULL` when no lease is held. See below. |
@@ -112,7 +113,14 @@ and translates its returned status into an HTTP code — so the guards are atomi
 | `consume_otp(otp)` | `boolean` | Atomically mark a code used. `true` only if still valid at that instant. |
 | `manual_claim(unique_id, fingerprint, otp)` | status | Bind a phone to a unit. Three guards: **(A)** this phone already owns a different active unit → `fingerprint_in_use`; **(B)** the unit is owned by another phone → `already_bound`; **(C)** the unit is mid-drain by another phone → `draining`. Re-binding the same phone is idempotent. Consumes the OTP only on success. |
 | `release_unit(unique_id, fingerprint, otp)` | status | Unpair — **only** the owning phone, proven by fingerprint. Consumes the OTP only on success. |
-| `check_binding(unique_id, fingerprint)` | status | The phone's periodic "am I still bound?". Returns `bound` (refreshing `last_seen`), `released` (stamping a drain lease), `bound_other`, or `not_found`. No OTP — device-initiated with no admin present. |
+| `check_binding(unique_id, fingerprint, app_version = NULL)` | status | The phone's periodic "am I still bound?". Returns `bound` (refreshing `last_seen` and recording `app_version`), `released` (stamping a drain lease), `bound_other`, or `not_found`. No OTP — device-initiated with no admin present. The third parameter is optional so an older APK that does not send it still works; `COALESCE` means such a phone cannot blank a previously recorded version. |
+
+> **Upgrading a database built before `app_version` existed.** Adding a parameter creates an
+> *overload* in PostgreSQL, not a replacement — a 2-argument call would then match both
+> signatures and fail as `function check_binding(text, text) is not unique`. Drop the old one
+> first: `DROP FUNCTION IF EXISTS check_binding(text, text);` then apply the current
+> `sql/hams_setup.sql`. Verify with `SELECT proname, pronargs FROM pg_proc ...` — expect one
+> row with `pronargs = 3`.
 | `admin_release(unique_id)` | status | Office force-free, without the phone and without an OTP. For lost, dead, or reassigned handsets. Clears the drain lease. |
 
 ### The status contract — a published interface

@@ -195,7 +195,7 @@ exactly like the above (set the Postgres credential; for `verify` also set the `
 in its IF node; then **Publish**):
 - **`verify`** — `POST /webhook/verify` → `check_binding`. **Required** for the app's binding
   revalidation; its URL is `VERIFY_URL` in `local.properties`. Guarded by `x-hams-key`, no OTP.
-- **`list-units`** — Manual-trigger read-only dashboard of the `units` registry (who's free /
+- **`list-units`** — Manual-trigger read-only dashboard of the `"G_PM_IT_IOT_HAMS_UNITS"` registry (who's free /
   claimed / last seen). Just select the Postgres credential and click **Execute**.
 - **`admin-release`** — login-protected Form to force-free any unit (`admin_release`). Set the
   Postgres credential + **Basic Auth** on the form node, then Publish.
@@ -229,7 +229,7 @@ RELEASE_URL=<base>/webhook/release
 HAMS_CLAIM_SECRET=<same value as the IF node>
 ```
 `.\gradlew.bat :app:installDebug` → on the phone's PairingScreen enter a unit id + an OTP → Pair.
-Confirm: `psql "$PROV_DB_URL" -c "SELECT unique_id, device_fingerprint, claimed FROM units ORDER BY unique_id;"`
+Confirm: `psql "$PROV_DB_URL" -c "SELECT unique_id, device_fingerprint, claimed FROM \"G_PM_IT_IOT_HAMS_UNITS\" ORDER BY unique_id;"`
 
 ---
 

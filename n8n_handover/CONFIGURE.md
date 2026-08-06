@@ -10,6 +10,18 @@ Import all 7. Order does not matter.
 
 ## 2. Fix every node that needs it
 
+> **Database prerequisite — check this before enabling VERIFY.**
+> `G_PM_IT_IOT_HAMS_VERIFY` calls `check_binding` with **three** arguments
+> (`unique_id, fingerprint, app_version`). Confirm the database has the 3-parameter version:
+> ```sql
+> SELECT proname, pronargs FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+>  WHERE n.nspname = 'public' AND proname = 'check_binding';
+> ```
+> Expect **one row with `pronargs = 3`**. No rows, or `pronargs = 2`, means the database was
+> built from an older script — apply the current `hams_setup.sql`. **Two** rows means an old
+> 2-argument copy survived: run `DROP FUNCTION IF EXISTS check_binding(text, text);` or every
+> binding check fails as ambiguous.
+
 Imported workflows come in **broken on purpose** — credentials are unlinked and secrets are placeholders.
 
 | Workflow | Node | Field | Change to |
@@ -26,6 +38,12 @@ Imported workflows come in **broken on purpose** — credentials are unlinked an
 ## 3. Publish the 5
 
 Webhook + form URLs return **404** until Published. Saving is not enough. Active is not enough.
+
+> **Re-publish after every later edit, too.** The live endpoint serves the **published**
+> version, not the saved one. Editing a workflow and saving without re-publishing leaves the
+> old version running. On `G_PM_IT_IOT_HAMS_VERIFY` this fails **silently** — it keeps
+> answering `bound` correctly while quietly ignoring your change, because the third argument
+> defaults to `NULL`. Symptom: `app_version` never populates in `G_PM_IT_IOT_HAMS_LISTUNITS`.
 
 | Publish ✅ | Do not publish ❌ |
 |---|---|

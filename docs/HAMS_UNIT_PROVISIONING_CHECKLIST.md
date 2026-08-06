@@ -76,7 +76,7 @@ imported into the n8n claim table (Direction 2, D5).
 ## D. Handover to provisioning (Direction 2)
 
 - [ ] Add each **verified** unit to the designated **"HAMS-ready" unit group** in Wialon — n8n seeds only from this group, so unverified units never enter the claim pool
-- [ ] n8n seeding workflow pulls the group → Postgres `units` table (UPSERT, `claimed = false`)
+- [ ] n8n seeding workflow pulls the group → Postgres `"G_PM_IT_IOT_HAMS_UNITS"` table (UPSERT, `claimed = false`)
 - [ ] Office admin then pairs each device manually (key in the unit id + supervisor OTP on the app's PairingScreen)
 
 ---

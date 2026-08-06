@@ -8,8 +8,8 @@ Setup steps: [SETUP.md](SETUP.md). Backend build: [provisioning/BUILD_ADMIN_BACK
 | Piece | What / where |
 |---|---|
 | **App** | Android APK built from `app/`. Pairs via n8n, pushes cut data straight to Wialon. |
-| **n8n** | Docker container `hams-n8n` → `http://localhost:5678` (data in volume `n8n_data`). Holds the 4 workflows. |
-| **Postgres** | `units` + `admin_otp` tables + provisioning functions. **Your own** Neon project or local container. |
+| **n8n** | Docker container `hams-n8n` → `http://localhost:5678` (data in volume `n8n_data`). Holds the 7 workflows. |
+| **Postgres** | `"G_PM_IT_IOT_HAMS_UNITS"` + `"G_PM_IT_IOT_HAMS_ADMIN_OTP"` tables + provisioning functions. **Your own** Neon project or local container. |
 | **Tunnel** | `cloudflared` exposes n8n over HTTPS so a real phone can reach it. URL is **ephemeral**. |
 | **Wialon** | IPS gateway `185.213.1.24:20332` — receives cut data. External; not part of this backend. |
 
@@ -24,6 +24,20 @@ Copy `local.properties.example` → `local.properties` and fill in. **Never edit
 | `MANUAL_CLAIM_URL` / `RELEASE_URL` | `<your n8n base>/webhook/manual-claim` and `/release` | 🔴 yours |
 | `VERIFY_URL` | `<your n8n base>/webhook/verify` — device binding re-check (revalidation). Same n8n base as the two above. | 🔴 yours |
 | `IPS_HOST` / `IPS_PORT` | `185.213.1.24` / `20332` | 🟢 preset |
+| `RELEASE_STORE_FILE` | path to the release keystore, **relative to the repo root** (e.g. `keys/hams-release.jks`) | 🔴 yours (secret) |
+| `RELEASE_STORE_PASSWORD` | keystore password | 🔴 yours (secret) |
+| `RELEASE_KEY_ALIAS` | key name inside the keystore (e.g. `hams`) | 🔴 yours |
+| `RELEASE_KEY_PASSWORD` | key password — **must equal the store password**; PKCS12 keystores (keytool's default since JDK 9) have no separate key password | 🔴 yours (secret) |
+
+> **The signing key is permanent.** Android derives the per-app `ANDROID_ID` — which the
+> provisioning registry stores as `device_fingerprint` — from the signing key. Signing a later
+> build with a *different* key changes every handset's fingerprint, forcing uninstall +
+> `admin_release` + re-pair on all of them. **Back up the `.jks` and its password off this
+> machine.** Current key: `CN=HAMS Task Recorder, O=KLK`, SHA-256 `98fb0136…4f73`.
+>
+> The four keys above are needed only for `:app:assembleRelease`. Without them the build still
+> succeeds but emits `app-release-unsigned.apk`, which Android refuses to install. The build
+> prints a `HAMS: ... UNSIGNED APK` warning when the keystore is missing or the path is wrong.
 
 ## Compile-time tunables (in `app/src/main/java/com/klk/hams/AppConfig.kt`, not `local.properties`)
 These are Kotlin constants, changed by editing `AppConfig.kt` and rebuilding — not injected from `local.properties`. Listed here so operators know they exist.
@@ -44,8 +58,8 @@ These are Kotlin constants, changed by editing `AppConfig.kt` and rebuilding —
 | n8n owner login | n8n first-run | your admin account | 🔴 yours |
 
 Postgres: any Postgres works. Neon needs **SSL = Require** (`?sslmode=require`). Set the same
-connection string as the n8n **Postgres** credential (call it "Postgres account"). Tables: `units`,
-`admin_otp`. Functions: `seed_unit`, `issue_otp`/`otp_is_valid`/`consume_otp`, `manual_claim`,
+connection string as the n8n **Postgres** credential (call it "Postgres account"). Tables: `"G_PM_IT_IOT_HAMS_UNITS"`,
+`"G_PM_IT_IOT_HAMS_ADMIN_OTP"` (quoted UPPERCASE - the quotes are mandatory in every reference). Functions: `seed_unit`, `issue_otp`/`otp_is_valid`/`consume_otp`, `manual_claim`,
 `release_unit`.
 
 ## Preset shared-platform values — 🟢 info only
@@ -70,7 +84,7 @@ Use as-is unless your Wialon account is on a different Wialon server.
 | `generate-otp` | Form (login) | n8n form → returns a 6-digit OTP | n8n login |
 | `manual-claim` | Webhook POST | `<n8n>/webhook/manual-claim` | `x-hams-key` + OTP |
 | `release` | Webhook POST | `<n8n>/webhook/release` | `x-hams-key` + OTP |
-| `seed` | Manual/Schedule | run in editor → pulls Wialon units into `units` | Wialon token |
+| `seed` | Manual/Schedule | run in editor → pulls Wialon units into `"G_PM_IT_IOT_HAMS_UNITS"` | Wialon token |
 
 Webhooks only go live after **Publish** (n8n 2.x). `<n8n>` = the tunnel base URL (or
 `http://127.0.0.1:5678` with `adb reverse`).
@@ -96,7 +110,7 @@ burns a code).
 docker start hams-n8n hams-pg                                  # after a reboot / sleep
 cloudflared tunnel --url http://localhost:5678                 # expose n8n (new URL each run — update local.properties + rebuild)
 psql $env:PROV_DB_URL -c "SELECT issue_otp(10);"              # mint an OTP
-psql $env:PROV_DB_URL -c "SELECT unique_id, device_fingerprint, claimed FROM units ORDER BY unique_id;"  # who owns what
+psql $env:PROV_DB_URL -c "SELECT unique_id, device_fingerprint, claimed FROM \"G_PM_IT_IOT_HAMS_UNITS\" ORDER BY unique_id;"  # who owns what
 .\gradlew.bat :app:installDebug                                # build + install the app
 ```
 
