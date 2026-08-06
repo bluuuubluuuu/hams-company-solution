@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -680,25 +679,8 @@ private fun StatusPill(
     }
 }
 
-@Composable
-private fun PendingBadge(count: Int, modifier: Modifier = Modifier) {
-    if (count <= 0) return
-    val label = if (count > 99) "99+" else count.toString()
-    Surface(
-        modifier = modifier.heightIn(min = 28.dp),
-        shape = RoundedCornerShape(50),
-        color = FieldForest,
-        contentColor = FieldForestOn
-    ) {
-        Text(
-            text = "↑ $label",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-    }
-}
+// (PendingBadge - a standalone pending-count pill - was removed 2026-08-05.
+//  It had no callers: the badge that ships is the one drawn inside PushButton.)
 
 // ---------------------------------------------------------------------------
 // Count card — fixed 180dp, 120sp digits

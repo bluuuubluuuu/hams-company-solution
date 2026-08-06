@@ -590,27 +590,11 @@ class TaskRepository(
         return diagnosticDao.deleteOlderThan(cutoff)
     }
 
-    /**
-     * First step of the Wi-Fi push flow: if an active task has count > 0,
-     * finalise it as "auto_wifi". Writes a local-only 284 audit row (never
-     * pushed under dictionary v1.2) and flips the task's push_status to
-     * "pending" so the engine can drain its outbound rows.
-     *
-     * Returns the saved task's id when something was saved, null on no-op
-     * (no active task or zero count). The push engine never receives an
-     * outbound event from this call — it triggers on `getPending()`.
-     */
-    @Deprecated(
-        "Task 2.8 spec: push and task lifecycle are independent. Push only operates on " +
-            "tasks already in push_status='pending'. Active-task finalization happens via " +
-            "manual save (NEW TASK 5s), app swipe (auto_killed), or day rollover (auto_rollover). " +
-            "Do not call from new code.",
-        level = DeprecationLevel.WARNING
-    )
-    suspend fun autoSaveActiveOnWifi(
-        batteryPct: Double,
-        location: LocationSnapshot?
-    ): Long? = saveActiveTask("auto_wifi", location, batteryPct)
+    // (autoSaveActiveOnWifi - the legacy "finalise the active task before pushing"
+    //  hook - was removed 2026-08-05 with no remaining callers. Under the Task 2.8
+    //  spec push and task lifecycle are independent: push drains only tasks already
+    //  in push_status='pending', and active-task finalisation happens via NEW TASK,
+    //  app swipe (auto_killed) or day rollover (auto_rollover).)
 
     private suspend fun getNextTaskSeqInternal(utcIsoTimestamp: String): Int {
         val zone = ZoneId.of("Asia/Kuala_Lumpur")

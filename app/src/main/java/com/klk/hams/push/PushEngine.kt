@@ -278,7 +278,8 @@ class PushEngine(
             30_000L, 60_000L, 120_000L, 240_000L, 300_000L,
         )
 
-        /** No-op pre-flight hook; callers inject `repo.autoSaveActiveOnWifi(...)` etc. */
+        /** No-op pre-flight hook. Kept as an injection point; nothing wires it today
+         *  (task finalisation is independent of push under the Task 2.8 spec). */
         val NO_PRE_FLIGHT: suspend () -> Unit = {}
 
         /** No-op progress callback (engine default when no caller wires foreground updates). */
