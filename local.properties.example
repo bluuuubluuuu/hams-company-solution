@@ -22,3 +22,23 @@ MANUAL_CLAIM_URL=https://<your-n8n-host>/webhook/manual-claim
 RELEASE_URL=https://<your-n8n-host>/webhook/release
 VERIFY_URL=https://<your-n8n-host>/webhook/verify
 HAMS_CLAIM_SECRET=<shared_secret_same_on_app_and_n8n>
+
+# --- Release signing (required only for :app:assembleRelease) ---
+# Without these, assembleRelease produces an UNSIGNED APK that Android refuses to install.
+#
+# THE KEYSTORE IS PERMANENT. Android derives the per-app ANDROID_ID - which the
+# provisioning registry stores as device_fingerprint - from the signing key. Signing a
+# later build with a DIFFERENT key changes every handset's fingerprint, so each phone
+# must be uninstalled, admin-released and re-paired. Create the keystore once, keep it
+# off this machine as well, and never regenerate it.
+#
+# Create one with:
+#   keytool -genkeypair -v -keystore hams-release.jks -alias hams \
+#           -keyalg RSA -keysize 2048 -validity 10000
+#
+# RELEASE_STORE_FILE is resolved relative to the repo root. Keep the .jks OUTSIDE the
+# repo (or gitignored) - it is a credential.
+RELEASE_STORE_FILE=<path/to/hams-release.jks>
+RELEASE_STORE_PASSWORD=<keystore_password>
+RELEASE_KEY_ALIAS=hams
+RELEASE_KEY_PASSWORD=<key_password>
