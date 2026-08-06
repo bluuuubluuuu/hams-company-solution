@@ -1,13 +1,14 @@
 -- =====================================================================
--- HAMS provisioning schema - consolidated setup script
+-- HAMS provisioning schema - complete setup script
 -- =====================================================================
 -- Run ONCE on a fresh, empty database:
 --     psql "$PROV_DB_URL" -f hams_setup.sql
 --
--- Equivalent to running the 7 numbered scripts in sql/history/ in this
--- order: 001, 003, 004, 005, 007, 006, 008.
---   - 002 does not exist (withdrawn during development).
---   - 007 runs before 006: 006 reads columns that 007 adds.
+-- This script CREATES EVERYTHING outright: every column is declared in its
+-- CREATE TABLE, not bolted on afterwards. It is the single source of truth
+-- for the schema. sql/history/ records how the schema was arrived at during
+-- development and is NOT meant to be run - read it only if you need the
+-- reasoning behind a design decision.
 --
 -- Idempotent: safe to re-run. Tables use CREATE TABLE IF NOT EXISTS,
 -- functions use CREATE OR REPLACE. Re-running never resets a live
@@ -16,28 +17,109 @@
 -- NAMING (SOP): tables and indexes are QUOTED UPPERCASE with the
 -- G_PM_IT_IOT_HAMS_ prefix. Every reference must be quoted:
 --     SELECT * FROM "G_PM_IT_IOT_HAMS_UNITS";   -- correct
---     SELECT * FROM G_PM_IT_IOT_HAMS_UNITS;       -- ERROR (folds to lowercase)
--- Functions and columns remain unquoted lowercase.
+--     SELECT * FROM G_PM_IT_IOT_HAMS_UNITS;     -- ERROR (folds to lowercase)
+-- Functions and columns remain unquoted lowercase. The function names are
+-- called BY NAME from the n8n workflows - renaming one breaks a workflow.
+--
+-- Object count after a clean run: 2 tables, 11 + 4 columns, 2 named indexes,
+-- 8 functions.
 -- =====================================================================
 
 
+-- =====================================================================
+-- SECTION 1 - TABLES
+-- =====================================================================
+
 -- ---------------------------------------------------------------------
--- 001_units.sql
+-- The equipment register. One row per Wialon unit / handset.
 -- ---------------------------------------------------------------------
--- HAMS provisioning registry. The authoritative free/claimed state lives here,
--- NOT in Wialon. Seeded from Wialon (HAMS-ready group) by the n8n seeding flow;
--- the per-device claim reads/writes this table only.
+-- The authoritative free/claimed state lives HERE, not in Wialon. Rows are
+-- created by the n8n seeding flow reading the company's Wialon account; the
+-- per-device claim reads and writes this table only.
+--
+-- This table holds CURRENT STATE. Columns are overwritten in place; it is not
+-- a history log.
 
 CREATE TABLE IF NOT EXISTS "G_PM_IT_IOT_HAMS_UNITS" (
-    unique_id          TEXT PRIMARY KEY,              -- Wialon unit IPS unique id (e.g. OC154_H001)
-    name               TEXT,
-    claimed            BOOLEAN NOT NULL DEFAULT false,
-    device_fingerprint TEXT UNIQUE,                   -- phone ANDROID_ID; multiple NULLs allowed
-    status             TEXT NOT NULL DEFAULT 'active', -- 'active' | 'retired'
-    last_seen          TIMESTAMPTZ,
+    -- Identity ---------------------------------------------------------
+    unique_id          TEXT PRIMARY KEY,               -- Wialon unit IPS unique id (e.g. OC003_H001).
+                                                       -- The phone sends this in its login frame; it is
+                                                       -- what routes harvest data to the right unit.
+    name               TEXT,                           -- human-readable label copied from Wialon
+                                                       -- (e.g. 003_G01C01_Mobile1). Carries NO logic -
+                                                       -- safe to rename in Wialon at any time.
+
+    -- Ownership --------------------------------------------------------
+    claimed            BOOLEAN NOT NULL DEFAULT false, -- false = free for pairing
+    device_fingerprint TEXT UNIQUE,                    -- phone ANDROID_ID. Proof of ownership: only the
+                                                       -- phone presenting this exact value may push as
+                                                       -- this unit or release it. NULL when free.
+                                                       -- UNIQUE stops one phone claiming two units.
+                                                       -- PostgreSQL permits many NULLs in a UNIQUE
+                                                       -- column; SQL Server does NOT - it would need a
+                                                       -- filtered index. See SCHEMA.md.
+    status             TEXT NOT NULL DEFAULT 'active', -- 'active' in service | 'retired' withdrawn.
+                                                       -- Administrative; no routine sets 'retired'.
+
+    -- Telemetry --------------------------------------------------------
+    last_seen          TIMESTAMPTZ,                    -- last contact from the phone: set at pairing,
+                                                       -- refreshed on every binding re-check (~15 min).
+    app_version        TEXT,                           -- APK version this handset last reported, so the
+                                                       -- office can answer "is every phone on the
+                                                       -- current build?". Reported by check_binding on a
+                                                       -- call that already happens - no extra endpoint.
+
+    -- Audit ------------------------------------------------------------
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),  -- maintained BY EACH ROUTINE, not by a
+                                                            -- trigger. Do not add a trigger: it would
+                                                            -- double-write against the routines.
+
+    -- Drain lease ------------------------------------------------------
+    -- When a unit is freed while its phone is still in the field, that phone may
+    -- hold unsent cuts. It needs a few minutes to flush them BEFORE logging out.
+    -- During that window no other phone may claim the unit, or the old phone's
+    -- backlog lands on the new owner and two workers' output merges.
+    --
+    -- check_binding stamps this lease on every 'released' answer; manual_claim
+    -- refuses a unit whose lease is unexpired unless the claimer IS the drainer.
+    -- Auto-expires, so no background job is needed. Cleared by the next
+    -- successful claim or release.
+    --
+    -- This is LIVE GUARD STATE, not history: it must clear, so it can never be
+    -- used to record who previously held a unit.
+    drain_until        TIMESTAMPTZ,                    -- lease expiry; NULL when no lease is held
+    drain_fingerprint  TEXT                            -- which phone holds the lease (exempt from it)
 );
+
+-- ---------------------------------------------------------------------
+-- Admin OTP store. Short-lived, single-use codes.
+-- ---------------------------------------------------------------------
+-- An administrator generates a code to authorise a pairing or unpairing. The
+-- code is validated first and CONSUMED ONLY IF THE ACTION SUCCEEDS, so a
+-- rejected attempt never burns a code.
+--
+-- Self-purging: issue_otp() deletes expired rows on every call. No cleanup job
+-- is needed and none should be added. Expected size is under 10 rows.
+--
+-- This table does NOT record which administrator issued a code, from where, or
+-- which unit it was spent on. There is no attribution by design.
+
+CREATE TABLE IF NOT EXISTS "G_PM_IT_IOT_HAMS_ADMIN_OTP" (
+    code        TEXT PRIMARY KEY,                   -- the 6-digit code, stored in PLAINTEXT
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(), -- issue time; audit only
+    expires_at  TIMESTAMPTZ NOT NULL,               -- hard expiry, default 10 min after issue.
+                                                    -- Past this the code is invalid regardless of used_at.
+    used_at     TIMESTAMPTZ                         -- non-NULL = spent. Single-use is enforced by
+                                                    -- checking used_at IS NULL.
+);
+
+
+-- =====================================================================
+-- SECTION 2 - INDEXES
+-- =====================================================================
+-- (The 3 primary-key indexes and the device_fingerprint UNIQUE index are
+--  created implicitly by the constraints above.)
 
 -- Partial index over the free, in-service units only.
 --
@@ -48,46 +130,22 @@ CREATE TABLE IF NOT EXISTS "G_PM_IT_IOT_HAMS_UNITS" (
 --
 -- Retained because it is near-free to maintain at this row count (one row per
 -- handset), and it is what a future "auto-assign the next free unit" flow or a
--- "how many units are free?" dashboard would ride on. Do not assume pairing
--- depends on it.
+-- "how many units are free?" dashboard would ride on. Pairing does NOT depend
+-- on it.
 CREATE INDEX IF NOT EXISTS "G_PM_IT_IOT_HAMS_IDX_UNITS_FREE"
     ON "G_PM_IT_IOT_HAMS_UNITS" (unique_id)
     WHERE claimed = false AND status = 'active';
 
--- ---------------------------------------------------------------------
--- 003_seed_unit.sql
--- ---------------------------------------------------------------------
--- Seeding UPSERT. Adds new unit ids as free; for an existing id it ONLY refreshes
--- the name. It deliberately does NOT touch claimed / device_fingerprint / status,
--- so re-running the seeding flow never resets a live device assignment.
 
-CREATE OR REPLACE FUNCTION seed_unit(p_unique_id text, p_name text)
-RETURNS void
-LANGUAGE sql
-AS $$
-    INSERT INTO "G_PM_IT_IOT_HAMS_UNITS" (unique_id, name, status)
-    VALUES (p_unique_id, p_name, 'active')
-    ON CONFLICT (unique_id) DO UPDATE
-        SET name = EXCLUDED.name, updated_at = now();
-$$;
+-- =====================================================================
+-- SECTION 3 - OTP FUNCTIONS
+-- =====================================================================
+-- Guard/OTP logic lives in plpgsql (atomic, testable) so the n8n workflows
+-- stay thin: each workflow calls one function and maps its returned status
+-- to an HTTP code.
 
--- ---------------------------------------------------------------------
--- 004_admin_otp.sql
--- ---------------------------------------------------------------------
--- Admin OTP store for the n8n provisioning backend (company one-off).
--- Codes are short-lived + single-use; consumed only on a successful privileged
--- action. Single-admin scope; no hashing (showcase). Translated to plpgsql so the
--- thin n8n workflows just SELECT these functions.
-
-CREATE TABLE IF NOT EXISTS "G_PM_IT_IOT_HAMS_ADMIN_OTP" (
-    code        TEXT PRIMARY KEY,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at  TIMESTAMPTZ NOT NULL,
-    used_at     TIMESTAMPTZ
-);
-
--- Issue a new OTP (6-digit). Purges expired rows first (keeps the table small and
--- avoids PK collisions with stale codes). Returns the plaintext code.
+-- Issue a new OTP (6-digit). Purges expired rows first - this keeps the table
+-- small and avoids PK collisions with stale codes. Returns the plaintext code.
 CREATE OR REPLACE FUNCTION issue_otp(p_ttl_minutes int DEFAULT 10)
 RETURNS text
 LANGUAGE plpgsql
@@ -114,7 +172,8 @@ AS $$
     );
 $$;
 
--- Consume (single-use): atomically mark used; true only if it was still valid.
+-- Consume (single-use): atomically mark used; true only if it was still valid
+-- at that instant.
 CREATE OR REPLACE FUNCTION consume_otp(p_otp text)
 RETURNS boolean
 LANGUAGE sql
@@ -127,15 +186,36 @@ AS $$
     SELECT EXISTS (SELECT 1 FROM upd);
 $$;
 
--- ---------------------------------------------------------------------
--- 005_manual_provision.sql
--- ---------------------------------------------------------------------
--- Manual-pairing provisioning functions for the n8n backend. Guard/OTP logic lives
--- in plpgsql (atomic, testable) so the n8n workflows stay thin. Each returns
--- jsonb {status, ...} that n8n maps to an HTTP code.
--- OTP is validated first and consumed ONLY on success (a failed guard never burns a code).
 
--- Bind a SPECIFIC unit to a device fingerprint (admin-supplied unit id).
+-- =====================================================================
+-- SECTION 4 - PROVISIONING FUNCTIONS
+-- =====================================================================
+-- Each returns jsonb {status, ...} that n8n maps to an HTTP code. The status
+-- strings are a PUBLISHED INTERFACE - the Android app branches on them, so
+-- renaming one requires rebuilding and reinstalling the app on every handset.
+
+-- ---------------------------------------------------------------------
+-- seed_unit - seeding UPSERT from Wialon
+-- ---------------------------------------------------------------------
+-- Adds new unit ids as free; for an existing id it ONLY refreshes the name. It
+-- deliberately does NOT touch claimed / device_fingerprint / status, so
+-- re-running the seeding flow can never reset a live device assignment.
+CREATE OR REPLACE FUNCTION seed_unit(p_unique_id text, p_name text)
+RETURNS void
+LANGUAGE sql
+AS $$
+    INSERT INTO "G_PM_IT_IOT_HAMS_UNITS" (unique_id, name, status)
+    VALUES (p_unique_id, p_name, 'active')
+    ON CONFLICT (unique_id) DO UPDATE
+        SET name = EXCLUDED.name, updated_at = now();
+$$;
+
+-- ---------------------------------------------------------------------
+-- manual_claim - bind a specific unit to a handset
+-- ---------------------------------------------------------------------
+-- Admin supplies the unit id; the phone supplies its fingerprint; the OTP
+-- authorises it. OTP is validated first and consumed ONLY on success, so a
+-- failed guard never burns a code.
 CREATE OR REPLACE FUNCTION manual_claim(p_unique_id text, p_fingerprint text, p_otp text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -175,7 +255,7 @@ BEGIN
 
     -- Guard C: unit is mid-drain by ANOTHER device (former owner still flushing).
     -- Refuse the claim until the lease expires; the drainer itself is exempt so
-    -- the same phone can re-pair without waiting (see 007_drain_lease.sql).
+    -- the same phone can re-pair without waiting.
     SELECT drain_until, drain_fingerprint INTO v_drain_until, v_drain_fp FROM "G_PM_IT_IOT_HAMS_UNITS"
      WHERE unique_id = p_unique_id;
     IF v_drain_until IS NOT NULL AND v_drain_until > now()
@@ -194,7 +274,10 @@ BEGIN
 END;
 $$;
 
--- Release a unit -- ONLY the device that owns it (fingerprint-scoped).
+-- ---------------------------------------------------------------------
+-- release_unit - worker unpairs, with an OTP
+-- ---------------------------------------------------------------------
+-- ONLY the device that owns the unit may release it, proven by fingerprint.
 CREATE OR REPLACE FUNCTION release_unit(p_unique_id text, p_fingerprint text, p_otp text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -224,51 +307,40 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------
--- 007_drain_lease.sql
+-- check_binding - the phone's periodic "am I still bound?"
 -- ---------------------------------------------------------------------
--- Drain lease — protects the flush window after an admin frees a unit.
+-- Called at launch, before every push, and every ~15 min. Read-mostly. Lets an
+-- admin force-release a unit without leaving the phone in a split-brain state.
 --
--- When a phone learns (via check_binding) that its unit was 'released', it needs
--- a few seconds to flush its pending cuts + the 301 marker to Wialon BEFORE it
--- logs out. During that window no OTHER device may claim the unit, or the old
--- phone's flush would land on the new owner and mix two devices' data.
+-- No OTP: this is an automatic, device-initiated call with no admin present. It
+-- is guarded at the n8n layer by the x-hams-key header, exactly like the others.
 --
--- Mechanism: check_binding stamps a short TTL lease (drain_until/drain_fingerprint)
--- on every 'released' answer; manual_claim refuses a unit whose lease is
--- unexpired unless the claimer IS the drainer. The lease auto-expires, so no app
--- callback is needed. A successful claim or OTP release clears it.
+-- Status contract (the app maps each to an action):
+--   'bound'       -> claimed by THIS fingerprint. Keep pushing.
+--                    Side effects: refreshes last_seen, records app_version.
+--   'released'    -> unit exists but is free. App MUST flush, then unprovision.
+--                    Side effect: stamps a 5-minute drain lease for this caller.
+--   'bound_other' -> owned by a DIFFERENT fingerprint. App MUST unprovision and
+--                    must NOT push - its work would land on someone else's unit.
+--   'not_found'   -> no such unit id. App treats this CONSERVATIVELY (keep
+--                    last-known-good, do NOT wipe): it can be a transient
+--                    seed/registry gap rather than a deliberate release.
+--   'bad_request' -> blank input.
 --
--- Edge (documented): a former-owner phone that is online-for-verify but never
--- gets Wi-Fi to flush will re-stamp the lease on each periodic check, keeping the
--- unit unclaimable until it flushes or the future admin_release override clears it.
-
-ALTER TABLE "G_PM_IT_IOT_HAMS_UNITS" ADD COLUMN IF NOT EXISTS drain_until       TIMESTAMPTZ;
-ALTER TABLE "G_PM_IT_IOT_HAMS_UNITS" ADD COLUMN IF NOT EXISTS drain_fingerprint TEXT;
-
--- ---------------------------------------------------------------------
--- 006_check_binding.sql
--- ---------------------------------------------------------------------
--- Binding revalidation for the app's check-on-push gate. Read-mostly: the app
--- calls this before every push (and at launch) to learn whether its stored
--- unique_id is STILL bound to this device. Lets an admin force-release a unit
--- (see admin_release) without leaving the phone in a split-brain state.
+-- p_app_version is OPTIONAL (defaults to NULL) so an older APK that does not
+-- send it still works, and COALESCE below means such a phone cannot blank out a
+-- previously recorded version.
 --
--- No OTP: this is an automatic, device-initiated call (no admin present). It is
--- guarded at the n8n layer by the x-hams-key header, exactly like manual-claim.
---
--- Status contract (the app maps these to an action):
---   'bound'      -> unit exists, claimed by THIS fingerprint. App keeps pushing.
---                   Side effect: refreshes last_seen (doubles as a heartbeat).
---   'released'   -> unit exists but is free (claimed=false / no fingerprint).
---                   App MUST self-unprovision and stop pushing.
---   'bound_other'-> unit exists but is owned by a DIFFERENT fingerprint.
---                   App MUST self-unprovision and stop pushing.
---   'not_found'  -> no such unit id in the registry. App should treat this
---                   CONSERVATIVELY (keep last-known-good, do NOT wipe) — it can
---                   be a transient seed/registry gap, not a deliberate release.
---   'bad_request'-> blank input.
-
-CREATE OR REPLACE FUNCTION check_binding(p_unique_id text, p_fingerprint text)
+-- NOTE if upgrading a database built before app_version existed: adding a
+-- parameter creates an OVERLOAD in PostgreSQL, not a replacement, and a 2-arg
+-- call would then match both signatures ("function check_binding(text, text)
+-- is not unique"). Drop the old one first:
+--     DROP FUNCTION IF EXISTS check_binding(text, text);
+CREATE OR REPLACE FUNCTION check_binding(
+    p_unique_id   text,
+    p_fingerprint text,
+    p_app_version text DEFAULT NULL
+)
 RETURNS jsonb
 LANGUAGE plpgsql
 AS $$
@@ -293,8 +365,12 @@ BEGIN
     END IF;
 
     IF v_claimed AND v_owner = p_fingerprint THEN
-        -- Still ours: refresh heartbeat so the admin list shows a live device.
-        UPDATE "G_PM_IT_IOT_HAMS_UNITS" SET last_seen = now(), updated_at = now()
+        -- Still ours: refresh the heartbeat so the admin list shows a live
+        -- device, and record the APK version it is running.
+        UPDATE "G_PM_IT_IOT_HAMS_UNITS"
+           SET last_seen   = now(),
+               updated_at  = now(),
+               app_version = COALESCE(p_app_version, app_version)
          WHERE unique_id = p_unique_id;
         RETURN jsonb_build_object('status', 'bound', 'unique_id', p_unique_id);
     END IF;
@@ -305,8 +381,8 @@ BEGIN
 
     -- claimed=false or fingerprint cleared -> the unit was released. Stamp a
     -- short drain lease for THIS caller so no other device can claim the unit
-    -- while this phone flushes its backlog. Refreshed on each 'released' answer;
-    -- auto-expires (see 007_drain_lease.sql).
+    -- while this phone flushes its backlog. Refreshed on each 'released'
+    -- answer; auto-expires.
     UPDATE "G_PM_IT_IOT_HAMS_UNITS"
        SET drain_until = now() + interval '5 minutes',
            drain_fingerprint = p_fingerprint,
@@ -317,22 +393,22 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------
--- 008_admin_release.sql
+-- admin_release - office force-free, no phone and no OTP
 -- ---------------------------------------------------------------------
--- Admin force-release (Feature 2). Frees a unit WITHOUT the owning phone or an
--- OTP — the office-side counterpart to the phone's fingerprint+OTP release_unit.
--- Safe only because binding revalidation is in place: a still-alive former owner
--- learns it was freed on its next check_binding and flushes + logs out (status
--- 'released'), or stops without pushing if the unit was already re-claimed
--- ('bound_other'). Intended for dead / lost / reassigned devices.
+-- The office-side counterpart to the phone's fingerprint+OTP release_unit.
+-- Intended for dead / lost / reassigned handsets.
 --
--- Guard this at the n8n layer (login-protected Form or x-hams-key) — the function
--- itself is unguarded by design so the admin console can free any unit.
+-- Safe only because binding revalidation is in place: a still-alive former
+-- owner learns it was freed on its next check_binding and flushes + logs out
+-- ('released'), or stops without pushing if the unit was already re-claimed
+-- ('bound_other').
 --
--- Clears the drain lease too: the freed unit starts clean. If the old phone is
--- still alive it re-stamps its own lease when it next reports 'released', which
--- is what protects its flush window.
-
+-- Guard this at the n8n layer (login-protected Form or x-hams-key). The
+-- function itself is unguarded by design so the admin console can free any unit.
+--
+-- Clears the drain lease too, so the freed unit starts clean. If the old phone
+-- is still alive it re-stamps its own lease when it next reports 'released',
+-- which is what protects its flush window.
 CREATE OR REPLACE FUNCTION admin_release(p_unique_id text)
 RETURNS jsonb
 LANGUAGE plpgsql

@@ -10,6 +10,13 @@ object AppConfig {
     const val MANUAL_CLAIM_URL: String = BuildConfig.MANUAL_CLAIM_URL
     const val RELEASE_URL: String = BuildConfig.RELEASE_URL
     const val VERIFY_URL: String = BuildConfig.VERIFY_URL
+    // Reported to the registry on every binding re-check so the office can see
+    // which build each handset is running. Format "<versionName>+<versionCode>",
+    // e.g. "1.0+1". versionCode is included because it is the value Android
+    // actually uses to order updates - a versionName can be reused or forgotten,
+    // so name alone cannot prove two handsets are on the same build.
+    // Both come from build.gradle.kts.
+    const val APP_VERSION: String = "${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
     /** Periodic binding re-check cadence. WorkManager floor is 15 min. */
     const val BINDING_CHECK_INTERVAL_MINUTES: Long = 15
 
@@ -55,19 +62,9 @@ object AppConfig {
     const val EVENT_CODE_BATTERY_CRITICAL: Int = 292    // local-only edge marker
     const val EVENT_CODE_GPS_DEGRADED: Int = 293        // local-only diagnostic marker
 
-    // Legacy dev counting codes from the pre-v1.2 design. Retained here only so
-    // any historical reference in code/tests still compiles; they are NOT
-    // outbound-approved and are NOT used by recordPlus/recordMinus anymore.
-    @Deprecated(
-        "v1.2 outbound policy uses 179/180 directly. 279/280 are not outbound-approved.",
-        ReplaceWith("EVENT_CODE_PLUS")
-    )
-    const val EVENT_CODE_PLUS_DEV: Int = 279
-    @Deprecated(
-        "v1.2 outbound policy uses 179/180 directly. 279/280 are not outbound-approved.",
-        ReplaceWith("EVENT_CODE_MINUS")
-    )
-    const val EVENT_CODE_MINUS_DEV: Int = 280
+    // (279/280 - the pre-v1.2 dev counting codes - were removed 2026-08-05. They
+    // had no remaining references. Counting uses 179/180 directly; see
+    // docs/HAMS_EVENT_CODE_DICTIONARY.md for why 279/280 are not outbound-approved.)
 
     const val HEARTBEAT_INTERVAL_MINUTES: Int = 1
     const val BATTERY_WARN_THRESHOLD_PCT: Int = 20

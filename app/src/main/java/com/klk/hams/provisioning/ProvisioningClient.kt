@@ -12,6 +12,7 @@ class ProvisioningClient(
     private val manualClaimUrl: String = AppConfig.MANUAL_CLAIM_URL,
     private val releaseUrl: String = AppConfig.RELEASE_URL,
     private val verifyUrl: String = AppConfig.VERIFY_URL,
+    private val appVersion: String = AppConfig.APP_VERSION,
     private val connectTimeoutMs: Int = 10_000,
     private val readTimeoutMs: Int = 10_000,
     private val opener: (String) -> HttpURLConnection = {
@@ -34,11 +35,15 @@ class ProvisioningClient(
         parseReleaseResponse(code, resp)
     }
 
-    /** POST { unique_id, fingerprint } to /verify with the shared-secret header.
-     *  No admin passkey - this is an automatic device-initiated re-check. */
+    /** POST { unique_id, fingerprint, app_version } to /verify with the shared-secret header.
+     *  No admin passkey - this is an automatic device-initiated re-check.
+     *  app_version rides along on a call that already happens (launch, pre-push,
+     *  every ~15 min) so the office can see which build each handset runs. The
+     *  registry only records it on a 'bound' answer, so a device that does not
+     *  own the unit cannot write to that field. */
     suspend fun verify(uniqueId: String, fingerprint: String): VerifyResult = withContext(Dispatchers.IO) {
         if (uniqueId.isBlank() || fingerprint.isBlank()) return@withContext VerifyResult.Keep("blank input")
-        val body = """{"unique_id":"${escapeJsonString(uniqueId)}","fingerprint":"${escapeJsonString(fingerprint)}"}"""
+        val body = """{"unique_id":"${escapeJsonString(uniqueId)}","fingerprint":"${escapeJsonString(fingerprint)}","app_version":"${escapeJsonString(appVersion)}"}"""
         val (code, resp) = post(verifyUrl, body, adminCode = "")
         parseVerifyResponse(code, resp)
     }
