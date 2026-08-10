@@ -71,3 +71,6 @@ $null
 # ==== Local-only working directory (never published from this repo) ====
 # Scratch area for work-in-progress that must not ship in this repo.
 _local/
+
+# ==== Archived development history (local reference only; never published) ====
+HAMS_archive/
