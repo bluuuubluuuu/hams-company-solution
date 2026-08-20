@@ -279,6 +279,9 @@ fun AdminSheet(
             lockout = adminLockout,
             error = adminError,
             onDismiss = { if (!busy) { adminAction = null; adminError = null } },
+            // Reset: only the app knows which unit this handset currently holds,
+            // so the admin's email can name it. A browser bookmark cannot.
+            onRequestCode = { client.requestOtp(store.uniqueIdOrNull()) },
             onSubmit = { code ->
                 adminError = null
                 when (action) {

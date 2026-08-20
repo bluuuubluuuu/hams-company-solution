@@ -272,6 +272,16 @@ fun PairingScreen(
             lockout = adminLockout,
             error = adminError,
             onDismiss = { adminAction = null; adminError = null },
+            // Pairing: the code is for the unit being typed in. On a
+            // release-and-bind it is the unit being released.
+            onRequestCode = {
+                client.requestOtp(
+                    when (action) {
+                        PairingAdminAction.BindTypedUnit -> unitId
+                        is PairingAdminAction.ReleaseAndBind -> action.ownedUnit
+                    }
+                )
+            },
             onSubmit = { code ->
                 val fp = fingerprint
                 if (fp == null) {

@@ -27,6 +27,7 @@ class TaskRepository(
     @Volatile
     var onTaskFinalized: (() -> Unit)? = null
 
+
     /**
      * Device/behaviour telemetry row. Pushed via the diagnostics telemetry drain.
      *

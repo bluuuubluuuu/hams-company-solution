@@ -42,8 +42,8 @@ android {
         //
         // versionName is the human-readable label. It is what each handset reports
         // to the registry via check_binding, and what shows in the admin unit list.
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -57,6 +57,10 @@ android {
         buildConfigField("String", "MANUAL_CLAIM_URL", javaStringLiteral(prop("MANUAL_CLAIM_URL")))
         buildConfigField("String", "RELEASE_URL",      javaStringLiteral(prop("RELEASE_URL")))
         buildConfigField("String", "VERIFY_URL",       javaStringLiteral(prop("VERIFY_URL")))
+        // Office OTP request endpoint. The app GETs this to ask the backend to
+        // issue a supervisor code and mail it to the admin; the code itself never
+        // comes back to the phone. Optional - blank disables the in-app button.
+        buildConfigField("String", "OTP_REQUEST_URL",  javaStringLiteral(prop("OTP_REQUEST_URL")))
     }
 
     // Release signing. The keystore itself is NEVER committed - it lives outside

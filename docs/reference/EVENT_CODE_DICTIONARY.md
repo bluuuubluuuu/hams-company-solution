@@ -25,7 +25,7 @@ The current heartbeat interval is one minute (`AppConfig.HEARTBEAT_INTERVAL_MINU
 
 ## Local-only task and health markers
 
-| Code | Source meaning | Reason it does not use the task delivery path |
+| Code | Source meaning | Reaso n it does not use the task delivery path |
 |---:|---|---|
 | 281 | New task marker | Local task boundary/audit. |
 | 283 | Auto-save on kill | Local audit. |

@@ -10,13 +10,17 @@ object AppConfig {
     const val MANUAL_CLAIM_URL: String = BuildConfig.MANUAL_CLAIM_URL
     const val RELEASE_URL: String = BuildConfig.RELEASE_URL
     const val VERIFY_URL: String = BuildConfig.VERIFY_URL
+    // Office OTP request endpoint. GET-only; the backend issues a supervisor code
+    // and mails it to the admin - the code never comes back to the phone. Blank
+    // hides the in-app "Request code" button, so the app still works without it.
+    const val OTP_REQUEST_URL: String = BuildConfig.OTP_REQUEST_URL
     // Reported to the registry on every binding re-check so the office can see
-    // which build each handset is running. Format "<versionName>+<versionCode>",
-    // e.g. "1.0+1". versionCode is included because it is the value Android
-    // actually uses to order updates - a versionName can be reused or forgotten,
-    // so name alone cannot prove two handsets are on the same build.
-    // Both come from build.gradle.kts.
-    const val APP_VERSION: String = "${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
+    // which build each handset is running. Format "<versionName> (<versionCode>)",
+    // e.g. "1.1 (2)" - the convention Android tooling uses. versionCode is
+    // included because it is what Android uses to order updates; a versionName
+    // can be reused or forgotten, so the name alone cannot prove two handsets
+    // are on the same build. Both come from build.gradle.kts.
+    const val APP_VERSION: String = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
     /** Periodic binding re-check cadence. WorkManager floor is 15 min. */
     const val BINDING_CHECK_INTERVAL_MINUTES: Long = 15
 
@@ -73,6 +77,13 @@ object AppConfig {
 
     const val PUSH_NEW_TASK_TO_WIALON: Boolean = false
     const val PUSH_MINUS_ONLY_IF_PRODUCTIVE: Boolean = true
+
+
+    // When presses share a second, later ones are stored one second apart so each
+    // gets its own slot on the wire. Real time catches up as soon as pressing
+    // slows. The cap stops a pathological burst from stamping events far into the
+    // future: past it, collision is preferred over a wrong time.
+    const val WIRE_TIMESTAMP_MAX_DRIFT_SEC: Long = 300
 
     // Continuous GPS stream (Task 2.7.5, revised after field validation 2026-05-06).
     // While a task is active the stream uses PRIORITY_HIGH_ACCURACY at 1 s interval —

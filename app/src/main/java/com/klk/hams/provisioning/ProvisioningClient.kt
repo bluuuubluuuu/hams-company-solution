@@ -12,6 +12,7 @@ class ProvisioningClient(
     private val manualClaimUrl: String = AppConfig.MANUAL_CLAIM_URL,
     private val releaseUrl: String = AppConfig.RELEASE_URL,
     private val verifyUrl: String = AppConfig.VERIFY_URL,
+    private val otpRequestUrl: String = AppConfig.OTP_REQUEST_URL,
     private val appVersion: String = AppConfig.APP_VERSION,
     private val connectTimeoutMs: Int = 10_000,
     private val readTimeoutMs: Int = 10_000,
@@ -48,6 +49,52 @@ class ProvisioningClient(
         parseVerifyResponse(code, resp)
     }
 
+    /**
+     * Ask the office backend to issue a supervisor code and mail it to the
+     * administrator. GET, because the endpoint is also opened from a browser.
+     *
+     * The code is deliberately NOT returned to the phone - it goes to the admin's
+     * mailbox, who reads it back to whoever is holding the handset. Holding a
+     * phone must not be enough to authorise a pairing, so this call only ever
+     * reports whether the request was accepted.
+     *
+     * Sends `x-hams-key` so the endpoint can be locked down the same way the
+     * other three are; harmless if the backend does not check it.
+     */
+    suspend fun requestOtp(uniqueId: String?): OtpRequestResult = withContext(Dispatchers.IO) {
+        if (otpRequestUrl.isBlank()) return@withContext OtpRequestResult.NotConfigured
+        // The unit id is passed as context so the admin's email can say WHICH
+        // handset asked - two anonymous codes a minute apart are indistinguishable.
+        val url = if (uniqueId.isNullOrBlank()) otpRequestUrl else {
+            val sep = if (otpRequestUrl.contains('?')) "&" else "?"
+            otpRequestUrl + sep + "unit=" + urlEncode(uniqueId)
+        }
+        val (code, resp) = get(url)
+        when (code) {
+            in 200..299 -> OtpRequestResult.Sent
+            401, 403 -> OtpRequestResult.Unauthorized
+            -1 -> OtpRequestResult.Error(resp ?: "no connection")
+            else -> OtpRequestResult.Error("http_$code")
+        }
+    }
+
+    private fun get(url: String): Pair<Int, String?> {
+        val conn = opener(url)
+        return try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = connectTimeoutMs
+            conn.readTimeout = readTimeoutMs
+            conn.setRequestProperty("x-hams-key", secret)
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            code to stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }
+        } catch (e: Exception) {
+            -1 to (e.message ?: e::class.java.simpleName)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun post(url: String, body: String, adminCode: String): Pair<Int, String?> {
         val conn = opener(url)
         return try {
@@ -80,6 +127,12 @@ class ProvisioningClient(
                 Regex("\"" + Regex.escape(name) + "\"\\s*:\\s*\"([^\"]+)\"")
                     .find(it)?.groupValues?.get(1)
             }
+
+        /** Percent-encode a query-parameter value. Unit ids are [A-Za-z0-9_]
+         *  today, but the encoder keeps a future id with other characters from
+         *  breaking the URL. */
+        fun urlEncode(value: String): String =
+            java.net.URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
         fun escapeJsonString(value: String): String = buildString {
             value.forEach { ch ->

@@ -21,6 +21,10 @@ DEVICE_UNIQUE_ID=HAMS_TEST_001
 MANUAL_CLAIM_URL=https://<your-n8n-host>/webhook/manual-claim
 RELEASE_URL=https://<your-n8n-host>/webhook/release
 VERIFY_URL=https://<your-n8n-host>/webhook/verify
+# OTP_REQUEST_URL: the app GETs this to ask the office to issue a supervisor code
+# and mail it to the administrator. The code is NEVER returned to the phone.
+# Optional - leave blank and the in-app "Request code" button is hidden.
+OTP_REQUEST_URL=https://<your-n8n-host>/webhook/<otp-webhook-id>
 HAMS_CLAIM_SECRET=<shared_secret_same_on_app_and_n8n>
 
 # --- Release signing (required only for :app:assembleRelease) ---

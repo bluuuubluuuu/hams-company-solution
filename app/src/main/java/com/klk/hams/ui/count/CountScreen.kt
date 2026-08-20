@@ -42,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,8 +57,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -187,6 +186,16 @@ private fun CountingContent(
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
     var showAdmin by remember { mutableStateOf(false) }
+
+    // Audible + haptic cue per press outcome. Held for the screen's lifetime so
+    // SoundPool loads its samples once, and released on dispose.
+    val feedback = remember(context) { FieldFeedback(context) }
+    DisposableEffect(feedback) {
+        onDispose { feedback.release() }
+    }
+    LaunchedEffect(vm, feedback) {
+        vm.pressFeedback.collect { feedback.play(it) }
+    }
 
     if (state.showNewTaskDialog) NewTaskDialog(state, vm)
 
@@ -742,22 +751,10 @@ private fun ActionRow(
     var minusJob by remember { mutableStateOf<Job?>(null) }
     var plusJob by remember { mutableStateOf<Job?>(null) }
 
-    // Field feedback 2026-07-15: a short vibration per recorded press, so a
-    // worker not looking at the screen feels each cut register. Uses the Vibrator
-    // directly (not performHapticFeedback) so it fires even when the device's
-    // touch-vibration system setting is off. Fires once per press and per
-    // auto-repeat tick. minSdk 33 → VibratorManager always available.
-    val context = LocalContext.current
-    val vibrator = remember(context) {
-        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-    }
-    fun tick() {
-        if (vibrator.hasVibrator()) {
-            vibrator.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
-    }
-    val doPlus = { tick(); onPlus() }
-    val doMinus = { tick(); onMinus() }
+    // Feedback is NOT fired here. A press can be refused (stale GPS, at the
+    // per-task ceiling, push in progress), and cueing on touch used to promise a
+    // count that was never stored. CountViewModel.pressFeedback reports the real
+    // outcome; CountScreen plays it.
 
     // Everything below is sized from the actual space this composable is given
     // (BoxWithConstraints), not fixed dp — so the buttons and their glyphs scale
@@ -795,15 +792,19 @@ private fun ActionRow(
                     labelLineHeight = plusLine,
                     container = if (state.canIncrement) FieldForest else FieldHairline,
                     onContainer = if (state.canIncrement) FieldForestOn else FieldSlate,
-                    enabled = state.canIncrement,
                     onPressStart = {
-                        doPlus()
+                        onPlus()
                         plusJob?.cancel()
-                        plusJob = scope.launch {
-                            delay(400)
-                            while (isActive) {
-                                doPlus()
-                                delay(200)
+                        plusJob = null
+                        // Hold-to-repeat only while presses are being accepted,
+                        // so a refused press cues once instead of machine-gunning.
+                        if (state.canIncrement) {
+                            plusJob = scope.launch {
+                                delay(400)
+                                while (isActive) {
+                                    onPlus()
+                                    delay(200)
+                                }
                             }
                         }
                     },
@@ -821,15 +822,17 @@ private fun ActionRow(
                     labelLineHeight = minusLine,
                     container = if (state.canDecrement) FieldEarth else FieldHairline,
                     onContainer = if (state.canDecrement) FieldEarthOn else FieldSlate,
-                    enabled = state.canDecrement,
                     onPressStart = {
-                        doMinus()
+                        onMinus()
                         minusJob?.cancel()
-                        minusJob = scope.launch {
-                            delay(400)
-                            while (isActive) {
-                                doMinus()
-                                delay(200)
+                        minusJob = null
+                        if (state.canDecrement) {
+                            minusJob = scope.launch {
+                                delay(400)
+                                while (isActive) {
+                                    onMinus()
+                                    delay(200)
+                                }
                             }
                         }
                     },
@@ -847,26 +850,29 @@ private fun CircleActionButton(
     caption: String?,
     container: Color,
     onContainer: Color,
-    enabled: Boolean,
     onPressStart: () -> Unit,
     onPressEnd: () -> Unit,
     modifier: Modifier = Modifier,
     labelFontSize: TextUnit = 88.sp,
     labelLineHeight: TextUnit = 96.sp
 ) {
-    // pointerInput keyed on Unit (NOT enabled). Keying on enabled caused a
-    // gesture-replay bug: pressing + made canDecrement flip false→true on the
-    // sibling button, re-keying its pointerInput, which cancelled+restarted
-    // the gesture detector — and any in-flight pointer could replay as a new
-    // press, firing onMinus on a sibling that was just enabled. The enabled
-    // check now lives inside the gesture via rememberUpdatedState so the
-    // detector stays alive for the lifetime of the composable.
-    val enabledRef by rememberUpdatedState(enabled)
+    // pointerInput keyed on Unit, never on a changing enabled flag. Keying on
+    // one caused a gesture-replay bug: pressing + made canDecrement flip
+    // false→true on the sibling button, re-keying its pointerInput, which
+    // cancelled+restarted the gesture detector — and any in-flight pointer could
+    // replay as a new press, firing onMinus on a sibling that was just enabled.
+    // Keying on Unit keeps the detector alive for the composable's lifetime, so
+    // there is nothing to restart and nothing to replay.
+    //
+    // The press is deliberately NOT gated here any more. Every press reaches the
+    // ViewModel so a refusal can be announced (2026-08-19: a disabled button
+    // swallowed stale-GPS presses in silence, which field workers reported as
+    // "no vibration"). The ViewModel remains the sole authority on whether a
+    // count is recorded — GPS gating is unchanged.
     Surface(
         modifier = modifier.pointerInput(Unit) {
             detectTapGestures(
                 onPress = {
-                    if (!enabledRef) return@detectTapGestures
                     onPressStart()
                     tryAwaitRelease()
                     onPressEnd()
