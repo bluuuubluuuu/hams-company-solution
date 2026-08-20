@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Prepared by | Woo Ying Hui (`it.intern4@klk.com.my`) |
-| Date | 10 August 2026 |
+| Date | 20 August 2026 |
 | Copyright | © 2026 Kuala Lumpur Kepong Berhad. All rights reserved. |
 | Status | Draft |
 | Approved handset | realme C85 |
@@ -58,7 +58,7 @@ Before use, install the approved signed build, enable location services, grant l
 
 1. Open HAMS and confirm that the device is paired.
 2. Confirm GPS is ready before counting.
-3. Press `+` for each count. Each recorded press sounds a tone and vibrates; `−` uses a lower tone. A press that was **not** recorded gives a distinct low double-buzz, so a worker who is not looking at the screen can still tell the difference.
+3. Press `+` for each count. Each recorded press sounds a tone and vibrates; `−` uses a lower tone. A press that was **not** recorded gives a distinct low double-buzz, so a worker who is not looking at the screen can still tell the difference. Tap; do not hold. On 1.2 a held button records ten counts per two seconds.
 4. Use `−` only for a genuine correction.
 5. Use New Task only after completing the prior task.
 6. Use normal app controls to check delivery; do not uninstall the app to resolve a push issue.

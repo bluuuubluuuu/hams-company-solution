@@ -20,7 +20,7 @@
 | `IPS_HOST`, `IPS_PORT` | Wialon/platform owner | IPS gateway connection. |
 | `DEVICE_UNIQUE_ID` | Development only | Fallback only; office pairing is the production identity. |
 | `MANUAL_CLAIM_URL`, `RELEASE_URL`, `VERIFY_URL` | Company n8n owner | Production HTTPS webhooks. |
-| `OTP_REQUEST_URL` | Company n8n owner | Optional office code-request endpoint. |
+| `OTP_REQUEST_URL` | Company n8n owner | Office code-request endpoint. Blank disables the in-app request button — and with it the automatic registry seeding that rides on the same call. The path must not change: it is compiled into every deployed APK. |
 | `HAMS_CLAIM_SECRET` | Company secret owner | Shared app-to-n8n request secret; compiled into the app, so do not treat it as server-only. |
 | `RELEASE_STORE_*` | Release-signing owner | Signing-keystore location and credentials. |
 
@@ -37,6 +37,9 @@
 | Retry attempts | 5 |
 | Local terminal-data retention | 30 days |
 | Binding revalidation interval | 15 minutes |
+| Hold-to-repeat delay / interval | 400 ms / 200 ms up to 1.2; 400 ms / 1500 ms from 1.3 |
+| Minimum interval between recorded presses | none up to 1.2; 1500 ms from 1.3 (`PRESS_MIN_INTERVAL_MS`) |
+| Wire-timestamp drift cap | not applicable up to 1.2; 300 s from 1.3 (`WIRE_TIMESTAMP_MAX_DRIFT_SEC`) |
 
 ## Change rules
 

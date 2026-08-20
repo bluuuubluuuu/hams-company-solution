@@ -40,7 +40,7 @@ The count screen shows task and GPS state, allows plus/minus count adjustment, s
 - The location stream requests high accuracy while held active, targets a one-second interval (500 ms fastest), and uses a watchdog after a six-second silence.
 - Each count capture records UTC time, decimal GPS coordinates, HDOP/satellites when supplied, speed when supplied, battery percentage, event code, and the net task count after the action.
 - The maximum net count per task is 9,999.
-- Holding `+` or `−` auto-repeats after 400 ms. The repeat interval is 1000 ms from 1.2 and 1500 ms from 1.3; before 1.2 it was 200 ms, so a two-second hold registered ten counts.
+- Holding `+` or `−` auto-repeats after 400 ms. The repeat interval is 200 ms up to and including 1.2, and 1500 ms from 1.3. **On 1.2 a two-second hold therefore registers ten counts**, of which the Wialon notification layer reports about two; only 1.3 changes this.
 - From 1.3, recorded presses of the same button are held at least 1500 ms apart (`PRESS_MIN_INTERVAL_MS`). The two buttons are tracked separately, so a `−` correction straight after a `+` is never blocked. This deliberately refuses presses made faster than the limit; see §3.2.
 - From 1.3, an event whose second is already taken by another press is stored one second later (`WireTimestamps`, capped at 300 s of drift). Only the wire `timestamp` moves; `created_at` keeps true clock time.
 - A plus action creates/updates a task and creates code `179` rows. A minus action creates code `180` rows; a decrement to zero is retained locally but does not queue for delivery.
