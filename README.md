@@ -25,5 +25,5 @@ Start with [Production documentation](docs/README.md).
 - `app/` is the Android application source.
 - [Database dictionary](docs/operations/database-reference/DATABASE_DICTIONARY.md) explains the company-managed database boundary.
 - `docs/operations/n8n-workflow-snapshots/` contains sanitized n8n workflow recovery snapshots.
-- `local.properties` and real credentials are never committed. Start from [local.properties.example](local.properties.example) and [credentials.env.example](config/examples/credentials.env.example).
+- `local.properties` and real credentials are never committed. Start from [local.properties.example](local.properties.example) and [credentials.env.example](credentials.env.example).
 - `HAMS_archive/` is ignored local history, not live operational guidance.

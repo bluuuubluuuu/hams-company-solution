@@ -5,6 +5,7 @@
 | Field | Value |
 |---|---|
 | Prepared by | Woo Ying Hui (`it.intern4@klk.com.my`) |
+| Project PIC | Leong Kah Choon (`kc.leong@klk.com.my`) |
 | Date | 20 August 2026 |
 | Copyright | © 2026 Kuala Lumpur Kepong Berhad. All rights reserved. |
 | Status | Draft |
@@ -36,7 +37,7 @@ The app does not administer Wialon, n8n, or PostgreSQL, and it does not perform 
 | Android support | API 33–35 |
 | Local store | Room/SQLite `hams.db`, schema version 6 |
 | Orientation | Sensor portrait |
-| Exact realme Android version | `[TO CONFIRM]` |
+| Exact realme Android version | 15 |
 
 Before use, install the approved signed build, enable location services, grant location permission, allow notifications, and complete pairing through the office process.
 

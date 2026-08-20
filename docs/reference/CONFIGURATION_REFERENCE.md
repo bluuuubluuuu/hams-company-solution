@@ -9,7 +9,7 @@
 |---|---|---|
 | `local.properties.example` | Safe Android build-time template. | Tracked |
 | `local.properties` | Real Android build-time values. | Ignored; never share or commit |
-| `config/examples/credentials.env.example` | Safe server-side variable-name template. | Tracked |
+| `credentials.env.example` | Safe server-side variable-name template. | Tracked |
 | Company secret store / n8n credentials | Live backend values. | Company-managed; not in this repository |
 
 ## Android build-time keys
