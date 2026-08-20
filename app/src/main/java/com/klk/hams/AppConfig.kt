@@ -78,6 +78,29 @@ object AppConfig {
     const val PUSH_NEW_TASK_TO_WIALON: Boolean = false
     const val PUSH_MINUS_ONLY_IF_PRODUCTIVE: Boolean = true
 
+    // Count-integrity set (2026-08-19). Wialon stores ONE message per unit per
+    // second - IPS timestamps are whole seconds - so two presses sharing a second
+    // used to arrive as one stored message. Reports that count messages were
+    // reading ~61% of the presses the handsets actually recorded.
+    //
+    // Hold-to-repeat matches the press rate limit below: a held button must not
+    // generate presses the limiter would only reject. 200 ms also meant an
+    // accidental two-second hold registered ten cuts.
+    const val PRESS_REPEAT_DELAY_MS: Long = 400
+    const val PRESS_REPEAT_INTERVAL_MS: Long = 1_500
+
+    // Minimum gap between two recorded presses of the SAME button.
+    //
+    // This is a deliberate rate limit, not a debounce. Wialon stores every
+    // message we send - same-second messages included, verified 2026-08-19 - but
+    // the notification layer that feeds the count report fires at most once per
+    // second, so presses sharing a second were reported as one. Holding presses
+    // at least this far apart gives each its own second, so each triggers.
+    //
+    // It costs real counts when someone taps faster than this, which is why a
+    // rejected press is announced (PressFeedback.Refused) rather than dropped
+    // silently - the worker must hear that it did not count.
+    const val PRESS_MIN_INTERVAL_MS: Long = 1_500
 
     // When presses share a second, later ones are stored one second apart so each
     // gets its own slot on the wire. Real time catches up as soon as pressing

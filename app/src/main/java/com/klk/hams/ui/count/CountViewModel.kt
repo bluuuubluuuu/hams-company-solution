@@ -46,6 +46,12 @@ class CountViewModel(
     )
     val pressFeedback: SharedFlow<PressFeedback> = _pressFeedback.asSharedFlow()
 
+    // Press rate limit, tracked per button so a - correction straight after a +
+    // is never blocked. Monotonic clock: a wall-clock correction must never
+    // swallow a press.
+    private var lastPlusAcceptedMs: Long = Long.MIN_VALUE
+    private var lastMinusAcceptedMs: Long = Long.MIN_VALUE
+
     private var nextTaskSeq: Int = 1
     private var newTaskHoldJob: Job? = null
     private var gateGranted: Boolean = false
@@ -170,6 +176,15 @@ class CountViewModel(
     }
 
     fun onPlus() {
+        // Announced, never silent. This limit refuses presses the worker really
+        // made, so it must be heard - an unannounced rejection is the invisible
+        // loss this whole change exists to remove.
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!PressRateLimiter.accepts(nowMs, lastPlusAcceptedMs, AppConfig.PRESS_MIN_INTERVAL_MS)) {
+            Log.d(TAG, "onPlus REJECTED: too soon after last press")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
+            return
+        }
 
         val state = _uiState.value
         if (!state.canIncrement) {
@@ -184,6 +199,7 @@ class CountViewModel(
             return
         }
         val battery = batteryMonitor.currentPct().toDouble()
+        lastPlusAcceptedMs = nowMs
         Log.d(TAG, "onPlus ACCEPTED: count=${state.count} -> recording")
         viewModelScope.launch {
             val result = repository.recordPlus(snapshot, battery)
@@ -197,6 +213,12 @@ class CountViewModel(
     }
 
     fun onMinus() {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!PressRateLimiter.accepts(nowMs, lastMinusAcceptedMs, AppConfig.PRESS_MIN_INTERVAL_MS)) {
+            Log.d(TAG, "onMinus REJECTED: too soon after last press")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
+            return
+        }
 
         val state = _uiState.value
         if (!state.canDecrement) {
@@ -211,6 +233,7 @@ class CountViewModel(
             return
         }
         val battery = batteryMonitor.currentPct().toDouble()
+        lastMinusAcceptedMs = nowMs
         Log.d(TAG, "onMinus ACCEPTED: count=${state.count} -> recording")
         viewModelScope.launch {
             val result = repository.recordMinus(snapshot, battery)

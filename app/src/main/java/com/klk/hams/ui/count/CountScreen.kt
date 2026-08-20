@@ -800,10 +800,10 @@ private fun ActionRow(
                         // so a refused press cues once instead of machine-gunning.
                         if (state.canIncrement) {
                             plusJob = scope.launch {
-                                delay(400)
+                                delay(AppConfig.PRESS_REPEAT_DELAY_MS)
                                 while (isActive) {
                                     onPlus()
-                                    delay(200)
+                                    delay(AppConfig.PRESS_REPEAT_INTERVAL_MS)
                                 }
                             }
                         }
@@ -828,10 +828,10 @@ private fun ActionRow(
                         minusJob = null
                         if (state.canDecrement) {
                             minusJob = scope.launch {
-                                delay(400)
+                                delay(AppConfig.PRESS_REPEAT_DELAY_MS)
                                 while (isActive) {
                                     onMinus()
-                                    delay(200)
+                                    delay(AppConfig.PRESS_REPEAT_INTERVAL_MS)
                                 }
                             }
                         }

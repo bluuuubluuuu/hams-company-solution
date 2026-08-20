@@ -9,6 +9,7 @@ import com.klk.hams.data.model.Task
 import com.klk.hams.push.PushEligibility
 import com.klk.hams.push.TelemetryRepository
 import com.klk.hams.time.Clock
+import com.klk.hams.time.WireTimestamps
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.LocalDate
@@ -27,6 +28,25 @@ class TaskRepository(
     @Volatile
     var onTaskFinalized: (() -> Unit)? = null
 
+    // Last wire-second handed out to a +/- event. Held in memory rather than read
+    // back from SQLite: `timestamp` is an ISO string whose fractional part is
+    // variable-width, so MAX()/ORDER BY on it is not reliably chronological. The
+    // only cost of losing it on a process restart is one possible collision, if a
+    // press happens in the very same second the app came back.
+    private val lastWireSecond = java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE)
+
+    /**
+     * Wire timestamp for a press: [nowIso] unless another press already claimed
+     * that second, in which case the next free one. Second resolution, matching
+     * what the IPS frame can express.
+     */
+    private fun wireTimestamp(nowIso: String): String {
+        val nowSecond = Instant.parse(nowIso).epochSecond
+        val second = lastWireSecond.updateAndGet { last ->
+            WireTimestamps.nextSecond(nowSecond, last, AppConfig.WIRE_TIMESTAMP_MAX_DRIFT_SEC)
+        }
+        return Instant.ofEpochSecond(second).toString()
+    }
 
     /**
      * Device/behaviour telemetry row. Pushed via the diagnostics telemetry drain.
@@ -130,7 +150,7 @@ class TaskRepository(
                 taskId = taskId,
                 eventType = "plus",
                 eventCode = AppConfig.EVENT_CODE_PLUS,
-                timestamp = now,
+                timestamp = wireTimestamp(now),
                 latDecimal = location.latDecimal,
                 lonDecimal = location.lonDecimal,
                 hdop = location.hdop,
@@ -166,7 +186,7 @@ class TaskRepository(
                 taskId = task.id,
                 eventType = "minus",
                 eventCode = AppConfig.EVENT_CODE_MINUS,
-                timestamp = now,
+                timestamp = wireTimestamp(now),
                 latDecimal = location.latDecimal,
                 lonDecimal = location.lonDecimal,
                 hdop = location.hdop,

@@ -74,3 +74,7 @@ _local/
 
 # ==== Archived development history (local reference only; never published) ====
 HAMS_archive/
+
+# n8n workflow exports: these carry live webhook paths, credential ids and
+# recipient addresses straight from the server. Keep them local.
+config/*.json

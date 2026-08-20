@@ -42,8 +42,8 @@ android {
         //
         // versionName is the human-readable label. It is what each handset reports
         // to the registry via check_binding, and what shows in the admin unit list.
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 5
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
