@@ -9,7 +9,7 @@
 | Copyright | © 2026 Kuala Lumpur Kepong Berhad. All rights reserved. |
 | Status | Draft |
 | Approved handset | realme C85 |
-| App version | 1.1 (2) |
+| App version | 1.2 (3) in production; 1.3 (5) under trial |
 | Android support | Android 13 (API 33) to Android 15 (API 35) |
 
 ## 1. Purpose and system scope
@@ -31,7 +31,8 @@ The app does not administer Wialon, n8n, or PostgreSQL, and it does not perform 
 |---|---|
 | Approved handset | realme C85 |
 | Application ID | `com.klk.hams` |
-| Release version | `1.1 (2)` |
+| Release version | `1.2 (3)` — the build deployed to the production fleet |
+| Trial version | `1.3 (5)` — count-integrity build, one spare handset only |
 | Android support | API 33–35 |
 | Local store | Room/SQLite `hams.db`, schema version 6 |
 | Orientation | Sensor portrait |
@@ -57,7 +58,7 @@ Before use, install the approved signed build, enable location services, grant l
 
 1. Open HAMS and confirm that the device is paired.
 2. Confirm GPS is ready before counting.
-3. Press `+` for each count and confirm the displayed net count.
+3. Press `+` for each count. Each recorded press sounds a tone and vibrates; `−` uses a lower tone. A press that was **not** recorded gives a distinct low double-buzz, so a worker who is not looking at the screen can still tell the difference.
 4. Use `−` only for a genuine correction.
 5. Use New Task only after completing the prior task.
 6. Use normal app controls to check delivery; do not uninstall the app to resolve a push issue.
@@ -65,7 +66,8 @@ Before use, install the approved signed build, enable location services, grant l
 | State | Required response |
 |---|---|
 | GPS ready | Counting is permitted. |
-| GPS unavailable/stale | Wait, move to an open area, or check location settings. |
+| GPS unavailable/stale | Wait, move to an open area, or check location settings. A press attempted now gives the refusal cue and is not counted. |
+| Refusal cue on a normal press (1.3 only) | Presses are limited to one per 1.5 seconds. Slow down; the refused press was not counted. Report it if it happens during ordinary work. |
 | Push in progress | Wait; do not repeat the push. |
 | Push failed | Keep the app installed, check network, and escalate if persistent. |
 | Unpaired/released | Stop delivery and contact the office administrator. |
@@ -119,6 +121,32 @@ An office administrator enters the approved unit ID and a valid OTP. The company
 - Coordinates are converted to IPS `DDMM.MMMM` / `DDDMM.MMMM` format.
 - Task-frame parameters are `ffb_cut`, `battery`, `event_code`, and `work_count`.
 - `ffb_cut=1` only for the plus/cut event code `179`.
+- Frame times are whole seconds. From 1.3 the app spaces same-second presses one second apart, so an event's wire time can be later than the moment it was pressed (bounded at 300 seconds of drift). `created_at` in the local database keeps true clock time.
+
+#### Counting messages vs reading `work_count`
+
+Verified against raw unit messages on 19 August 2026: **Wialon stores multiple messages that share a timestamp.** Three messages were retained at `16:06:55`, three at `16:06:57`, two at `16:06:58`. No task message has been lost in transport.
+
+The under-reporting observed on 18 August 2026 — 3471 counted against 5691 actually pressed, a 39% shortfall — comes from the **notification layer** that feeds the count report, which triggers at most once per second. Presses sharing a second produced one notification.
+
+Two independent remedies, and they solve different halves of the problem:
+
+| Remedy | Effect | Covers past data |
+|---|---|---|
+| Report on `work_count` deltas | Recovers the true count from data already in Wialon | **Yes** |
+| App press rate limit (1.3) | Prevents presses sharing a second from now on | No |
+
+`work_count` is cumulative per task and rides on every task frame, so summing its rises reconstructs the true figure. Because it resets to `0` at each new task and decreases on a `−` correction, a report must distinguish the two:
+
+| Δ between consecutive messages | Meaning | Contribute |
+|---|---:|---|
+| Δ > 0 | one or more cuts — recovers presses that shared a second | +Δ |
+| Δ = −1 | a `−` correction | −1 |
+| Δ ≤ −2 | a new task began | + the new `work_count` |
+
+The `Δ ≤ −2` rule is inferred, not verified against a full day of raw messages, and is ambiguous if two `−` presses share a second. Confirm it against real data before relying on it for payroll-grade figures.
+
+Ordering caveat: Wialon cannot order messages that share a timestamp — the 19 August sample shows `work_count` values out of sequence within one second. A press sequence cannot be reconstructed from such data. The 1.3 timestamp spacing removes this for future data.
 
 ### 5.3 n8n and PostgreSQL backend
 
@@ -126,8 +154,8 @@ The company n8n server is the operational source of truth; repository workflow J
 
 | n8n workflow | Role |
 |---|---|
-| Seed | Create/refresh unit registry records. |
-| Device OTP | Issue office OTP. |
+| Seed | Create/refresh unit registry records in bulk. Manual trigger. |
+| Device OTP | Seed the requested unit if the registry has never seen it, then issue and email an office OTP. |
 | Manual Claim | Pair a phone to a unit. |
 | Verify | Check current phone-to-unit ownership. |
 | Release | Release verified owner binding. |

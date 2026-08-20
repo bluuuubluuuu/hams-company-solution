@@ -23,8 +23,25 @@
 | Wialon | Message receipt, named parameters, and unit filter/sensor configuration. |
 | Backend contract | n8n claim/release/verify flow and PostgreSQL routine status responses. |
 
+## Verified 19-20 August 2026
+
+| Area | Result |
+|---|---|
+| Press feedback (1.2) | Distinct `+`/`-` tones and vibration confirmed on a handset. |
+| In-place upgrade | 1.2 to 1.3 over an existing install kept pairing, fingerprint, and unsent rows. |
+| Wialon message retention | Raw unit messages show same-timestamp messages retained - three at `16:06:55`, three at `16:06:57`. No task message lost in transport. |
+| Automatic seeding | End-to-end: a code request for a unit absent from the registry seeded it before the OTP was issued. |
+| Webhook path stability | The production OTP URL after republishing matches `OTP_REQUEST_URL` compiled into the deployed APKs. |
+
+Not verified on a handset: the 1.3 press rate limit, its refusal cue, and whether the notification-based count now matches the number of presses. That last one is the acceptance test for 1.3.
+
 ## Known verification gap
 
-The final production Wialon report-template and geofence-side result after cutover is not clearly recorded as fully verified. Treat it as an outstanding regression/acceptance test before relying on report output changes.
+The production Wialon report-template result is still not verified end to end.
+
+The cause of the shortfall is now established - the notification layer triggers at most once per second, so presses sharing a second were counted once - but neither remedy has been confirmed against a full day of field data. Treat both as outstanding:
+
+- **1.3 rate limit** - does the notification count now equal the presses made?
+- **`work_count` delta report** - does it reproduce the true figure, including across task resets and `-` corrections? The `delta <= -2 means new task` rule is inferred and unproven.
 
 See [Functional requirements](requirements/FR_APP_REQUIREMENTS.md), [Non-functional requirements](requirements/NFR_APP_REQUIREMENTS.md), and the [Operations runbook](../operations/OPERATIONS_RUNBOOK.md).

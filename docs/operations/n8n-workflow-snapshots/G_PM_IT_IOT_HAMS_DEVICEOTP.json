@@ -1,36 +1,6 @@
 {
-  "updatedAt": "2026-06-30T07:59:37.278Z",
-  "createdAt": "2026-06-30T07:50:33.443Z",
-  "id": "ksyvC7oGQhQDKnxo",
   "name": "G_PM_IT_IOT_HAMS_DEVICEOTP",
-  "description": null,
-  "active": false,
-  "isArchived": false,
   "nodes": [
-    {
-      "parameters": {
-        "formTitle": "Generate Supervisor OTP",
-        "formDescription": "Single-use code for device pairing / reset",
-        "formFields": {
-          "values": [
-            {
-              "fieldLabel": "minutes",
-              "fieldType": "number"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.formTrigger",
-      "typeVersion": 2.6,
-      "position": [
-        0,
-        0
-      ],
-      "id": "eb793545-6b37-4e25-a6d9-00486df00786",
-      "name": "On form submission",
-      "webhookId": "7044f0e2-acae-40c8-bb53-a6530aa82fa9"
-    },
     {
       "parameters": {
         "operation": "executeQuery",
@@ -40,39 +10,354 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        208,
-        0
+        48,
+        -64
       ],
-      "id": "2cd371cd-7bfe-4e30-a6ea-1378ee9e22fc",
+      "id": "591d750e-e5de-4277-ae05-7ed85aca115c",
       "name": "Execute a SQL query",
       "credentials": {
         "postgres": {
-          "id": "Cas1s6GCZh1blzuK",
+          "id": "<CREDENTIAL_ID>",
           "name": "Postgres account"
         }
       }
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "OTP generated",
-        "completionMessage": "=Code: {{ $json.otp }} — valid ~10 min, single use.",
+        "authentication": "microsoftOAuth2Api",
+        "toRecipients": "<OTP_RECIPIENT_EMAIL>",
+        "subject": "=OTP generated - {{ $json.otp }}",
+        "bodyContent": "=Code: {{ $json.otp }} — valid ~10 min, single use.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -64
+      ],
+      "id": "2c4374a4-f228-4e63-8a65-730ccc30a4b0",
+      "name": "Send a message",
+      "webhookId": "6aa9845d-9fa2-45d5-96a3-1099a557c48d",
+      "credentials": {
+        "microsoftOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "Microsoft account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "<OTP_REQUEST_WEBHOOK_PATH>",
         "options": {}
       },
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 2.5,
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
       "position": [
-        416,
-        0
+        -192,
+        -64
       ],
-      "id": "990653d2-fc6d-40e7-8869-94ac9a965d1a",
-      "name": "Form",
-      "webhookId": "f9b05fee-26d9-42b9-b1be-df4398ee617e"
+      "id": "cbb3896f-0614-4333-87ec-223426b70e81",
+      "name": "Webhook",
+      "webhookId": "<OTP_REQUEST_WEBHOOK_PATH>"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PairingScreen sends ?unit=<the unit id being typed>; AdminSheet sends the\n// handset's current unit, which an unprovisioned device does not have. Either\n// way the OTP must still be issued - seeding is the optional extra.\nconst raw = String(($json.query || {}).unit || '').trim();\nconst seedable = /^OC\\d{3}_H_[A-Za-z0-9]+$/.test(raw);\nreturn [{ json: { unit: seedable ? raw : null, unit_raw: raw, seedable } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000001",
+      "name": "Parse unit"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "seed-cond-2",
+              "leftValue": "={{ $json.seedable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000002",
+      "name": "If unit id well-formed",
+      "notes": "No unit supplied, or malformed: nothing to seed. The false branch goes straight to the OTP so a code is still issued."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT EXISTS (SELECT 1 FROM \"G_PM_IT_IOT_HAMS_UNITS\" WHERE unique_id = $1) AS seeded;",
+        "options": {
+          "queryReplacement": "={{ $('Parse unit').item.json.unit }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        408,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000003",
+      "name": "Already seeded?",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "EXISTS, not a row count. A plain SELECT returning zero rows emits zero items in n8n, which would silently kill the branch for exactly the unit that still needs seeding."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "seed-cond-4",
+              "leftValue": "={{ $json.seeded }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        608,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000004",
+      "name": "If not yet seeded",
+      "notes": "Already in the registry - every live handset - skips Wialon entirely. In steady state this endpoint costs one extra cheap SELECT."
+    },
+    {
+      "parameters": {
+        "url": "https://hst-api.wialon.eu/wialon/ajax.html",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "svc",
+              "value": "token/login"
+            },
+            {
+              "name": "params",
+              "value": "{\"token\": \"<WIALON_TOKEN>\"}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        808,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000005",
+      "name": "Wialon login",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "notes": "Token filled in - same one the SEED workflow uses. 3s cap and continue-on-error: Wialon being down must never cost a technician an OTP, which also means a failure here is SILENT. The n8n execution log is the only place it shows."
+    },
+    {
+      "parameters": {
+        "url": "https://hst-api.wialon.eu/wialon/ajax.html",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "svc",
+              "value": "core/search_items"
+            },
+            {
+              "name": "params",
+              "value": "={{ JSON.stringify({ spec: { itemsType: 'avl_unit', propName: 'sys_unique_id', propValueMask: $('Parse unit').item.json.unit, sortType: 'sys_unique_id' }, force: 1, flags: 257, from: 0, to: 0 }) }}"
+            },
+            {
+              "name": "sid",
+              "value": "={{ $json.eid }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1008,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000006",
+      "name": "Wialon find this unit",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "notes": "Searches sys_unique_id for the one unit asked for, not the whole account."
+    },
+    {
+      "parameters": {
+        "jsCode": "// ALWAYS emits exactly one item, whatever Wialon did. A miss, an empty\n// body, or an error item passed through by continue-on-error must still\n// let the workflow reach the OTP - the code is what the technician is\n// waiting for, and it must not depend on Wialon answering.\nconst unit = $('Parse unit').item.json.unit;\nconst items = Array.isArray($json.items) ? $json.items : [];\nconst hit = items.find(i => String(i.uid || '') === unit) || null;\nreturn [{ json: { matched: !!hit, uid: hit ? hit.uid : null, nm: hit ? hit.nm : null } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1208,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000007",
+      "name": "Pick exact match",
+      "alwaysOutputData": true,
+      "notes": "Exact uid equality, not whatever the mask returned: propValueMask accepts wildcards and a near-miss must never be seeded under the wrong id."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "seed-cond-8",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1408,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000008",
+      "name": "If matched in Wialon",
+      "notes": "Not licensed in Wialon yet: nothing to seed. Still issues the OTP - manual_claim will answer not_found, which is the truthful outcome."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT seed_unit($1, $2);",
+        "options": {
+          "queryReplacement": "={{ $json.uid }}, {{ $json.nm }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1608,
+        -260
+      ],
+      "id": "5eed0000-0000-4000-8000-000000000009",
+      "name": "Seed unit",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "postgres": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "seed_unit only inserts a new row or refreshes a name - it never touches claimed / device_fingerprint / status, so it cannot disturb a live pairing. Runs BEFORE the OTP is issued, so the row exists before anyone can type the code."
     }
   ],
   "connections": {
-    "On form submission": {
+    "Execute a SQL query": {
       "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse unit": {
+      "main": [
+        [
+          {
+            "node": "If unit id well-formed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If unit id well-formed": {
+      "main": [
+        [
+          {
+            "node": "Already seeded?",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Execute a SQL query",
@@ -82,11 +367,91 @@
         ]
       ]
     },
-    "Execute a SQL query": {
+    "Already seeded?": {
       "main": [
         [
           {
-            "node": "Form",
+            "node": "If not yet seeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If not yet seeded": {
+      "main": [
+        [
+          {
+            "node": "Wialon login",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wialon login": {
+      "main": [
+        [
+          {
+            "node": "Wialon find this unit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wialon find this unit": {
+      "main": [
+        [
+          {
+            "node": "Pick exact match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick exact match": {
+      "main": [
+        [
+          {
+            "node": "If matched in Wialon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If matched in Wialon": {
+      "main": [
+        [
+          {
+            "node": "Seed unit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seed unit": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
             "type": "main",
             "index": 0
           }
@@ -94,45 +459,11 @@
       ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "staticData": null,
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "nodeGroups": [],
-  "pinData": {},
-  "versionId": "7e7ee823-ddf9-4a20-a7c0-9f2d87e11aa2",
-  "activeVersionId": null,
-  "versionCounter": 16,
-  "triggerCount": 0,
-  "sourceWorkflowId": null,
-  "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-06-30T07:50:33.451Z",
-      "createdAt": "2026-06-30T07:50:33.451Z",
-      "role": "workflow:owner",
-      "workflowId": "ksyvC7oGQhQDKnxo",
-      "projectId": "gKvBFdIwESqxvKrx",
-      "project": {
-        "updatedAt": "2026-06-30T06:18:15.383Z",
-        "createdAt": "2026-06-30T06:14:22.331Z",
-        "id": "gKvBFdIwESqxvKrx",
-        "name": "Woo Ying Hui <yhwoo516@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "bacd28f7-2efb-4923-83ec-fc4c1426c82d"
-      }
-    }
-  ],
-  "versionMetadata": {
-    "name": null,
-    "description": null
-  }
+  "nodeGroups": []
 }

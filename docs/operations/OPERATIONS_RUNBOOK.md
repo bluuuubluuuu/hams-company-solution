@@ -18,6 +18,10 @@
 | Count recorded but not uploaded | Pending-task count, network availability, app push outcome | Wialon rejects or never stores a confirmed send |
 | Pairing or release fails | OTP freshness, selected unit id, n8n workflow execution, binding result | Registry data conflicts or an office override is needed |
 | Unit receives data but report is wrong | Wialon unit filters, sensors, report configuration | A production report/sensor change is required |
+| Report count lower than the presses made | Compare the report against `work_count` in the raw unit messages. Wialon retains same-timestamp messages, so this is a notification/report question, not lost data | The report must be rebuilt on `work_count` deltas |
+| New unit rejected at pairing | Registry row for that unit id; the id must match `^OC\d{3}_H_[A-Za-z0-9]+$`; the Device OTP execution log for the code request | Seeding ran but wrote no row, or the unit is absent from Wialon |
+| Seeding silently not happening | The `Wialon login` and `Wialon find this unit` nodes in the Device OTP execution. Both continue on error, so OTPs keep arriving while nothing is seeded | The Wialon token is rejected or the unit search returns nothing for a unit known to exist |
+| Presses refused during normal counting (1.3) | The 1.5 s press rate limit is doing this by design; the refusal cue confirms it | Field pace genuinely exceeds one press per 1.5 s — reconsider the limit or move reporting to `work_count` |
 
 ## Android evidence
 

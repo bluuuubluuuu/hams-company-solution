@@ -31,7 +31,7 @@
 | Setting | Current value |
 |---|---|
 | Android minimum / target SDK | 33 / 35 |
-| App version | 1.1 (2) |
+| App version | 1.2 (3) production; 1.3 (5) trial |
 | IPS default | `185.213.1.24:20332` |
 | Task batch limit | 10 |
 | Retry attempts | 5 |

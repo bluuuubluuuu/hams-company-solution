@@ -74,3 +74,18 @@ The application does not have a stored `ffb_cut` database column. It derives tha
 ## Change control
 
 Changing a code, mapping, or queue rule requires source, tests, and this dictionary to change together. The legacy vendor PDFs under [protocols/legacy](../protocols/legacy/) are background reference only; they do not define the active app mapping.
+
+## Wire timestamps
+
+IPS frames carry whole seconds (`ddMMyy;HHmmss`, UTC). From app version 1.3 an
+event whose second is already occupied by another press is stored one second
+later, so each press occupies its own second on the wire. Drift is capped at 300
+seconds, past which true time is used and a shared second is accepted.
+
+An event's wire time can therefore be later than the instant it was pressed.
+`created_at` in the local database is never adjusted and remains true clock time.
+
+Wialon itself retains messages that share a timestamp (verified 19 August 2026),
+so this spacing is not required to avoid data loss. It exists because the Wialon
+notification layer triggers at most once per second, and because messages sharing
+a timestamp cannot be ordered.
