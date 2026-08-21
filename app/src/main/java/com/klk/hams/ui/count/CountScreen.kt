@@ -301,6 +301,8 @@ private fun CountingContent(
                 context = context,
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(10.dp))
+            VersionFootnote(modifier = Modifier.fillMaxWidth())
         }
 
         if (state.manualPushActive) {
@@ -738,6 +740,32 @@ private fun CountCard(count: Int, atMax: Boolean, modifier: Modifier = Modifier)
 // ---------------------------------------------------------------------------
 // Action row — hero + circle centered, small − circle bottom-left
 // ---------------------------------------------------------------------------
+
+/**
+ * Build identity, bottom of the count screen. Deliberately quiet - it is for a
+ * supervisor answering "which build is this handset on?", not for the worker.
+ *
+ * Text comes from [AppConfig.UI_VERSION_FOOTER]; a blank value renders nothing
+ * and gives its space back to the buttons above.
+ *
+ * Sizing follows the rest of this screen: no fixed height, so it grows with the
+ * user's font-scale setting instead of clipping, and the surrounding Column
+ * absorbs the change through ActionRow's weight.
+ */
+@Composable
+private fun VersionFootnote(modifier: Modifier = Modifier) {
+    val label = AppConfig.UI_VERSION_FOOTER
+    if (label.isBlank()) return
+    Text(
+        label,
+        modifier = modifier,
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodySmall,
+        color = FieldInkSoft,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
 
 @Composable
 private fun ActionRow(

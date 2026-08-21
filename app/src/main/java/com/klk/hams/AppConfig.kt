@@ -21,6 +21,20 @@ object AppConfig {
     // can be reused or forgotten, so the name alone cannot prove two handsets
     // are on the same build. Both come from build.gradle.kts.
     const val APP_VERSION: String = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+
+    // -----------------------------------------------------------------------
+    // Version footer shown at the bottom of the count screen.
+    //
+    // EDIT HERE. This constant is the only thing that controls that line; no
+    // other file needs touching. VERSION_NAME comes from build.gradle.kts, so a
+    // version bump updates the footer on its own.
+    // Set this to "" to hide the footer entirely.
+    //
+    // Deliberately the name only. versionCode is the registry's business - it
+    // still travels in APP_VERSION above - and means nothing to whoever is
+    // reading this line off a handset.
+    // -----------------------------------------------------------------------
+    const val UI_VERSION_FOOTER: String = "HAMS ${BuildConfig.VERSION_NAME}"
     /** Periodic binding re-check cadence. WorkManager floor is 15 min. */
     const val BINDING_CHECK_INTERVAL_MINUTES: Long = 15
 
