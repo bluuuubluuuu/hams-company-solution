@@ -17,6 +17,9 @@ This is a code-derived specification of the Android application as it exists in 
 | Orientation | Sensor portrait (0° or 180°) |
 | On-device database | Room v6, `hams.db` |
 | Approved production handset | realme C85 |
+| Authorship record | `assets/NOTICE.txt`, manifest `com.klk.hams.author` |
+
+Every build carries `Built by Woo Ying Hui, 2026` in two places, both inert at runtime and neither rendered on screen: `assets/NOTICE.txt` and a `<meta-data>` entry named `com.klk.hams.author`. Read them with `unzip -p <apk> assets/NOTICE.txt` or `aapt dump xmltree <apk> --file AndroidManifest.xml`. Keep both when changing build inputs.
 
 **Operational decision:** the approved production handset is **realme C85**. This is a deployment decision supplied by the project owner, not a fact inferred from Android source.
 
@@ -32,7 +35,9 @@ Launch
   -> count screen and foreground location service
 ```
 
-The count screen shows task and GPS state, allows plus/minus count adjustment, starts a new task through a protected hold gesture, and exposes push/provisioning controls. The app requests notification permission on Android 13+ for its user-visible notifications.
+The count screen shows task and GPS state, allows plus/minus count adjustment, starts a new task through a protected hold gesture, and exposes push/provisioning controls. Its bottom line shows the build name — `HAMS 1.2`, `HAMS 1.3` — so a handset can be identified without adb. The app requests notification permission on Android 13+ for its user-visible notifications.
+
+The footer text is `AppConfig.UI_VERSION_FOOTER`, which reads `VERSION_NAME` from `build.gradle.kts`. A blank value renders nothing. It carries the version name only; `versionCode` continues to reach the registry through `APP_VERSION`.
 
 ## 3. Counting and task rules
 

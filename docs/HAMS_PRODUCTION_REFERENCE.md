@@ -38,6 +38,7 @@ The app does not administer Wialon, n8n, or PostgreSQL, and it does not perform 
 | Local store | Room/SQLite `hams.db`, schema version 6 |
 | Orientation | Sensor portrait |
 | Exact realme Android version | 15 |
+| Authorship record | `Built by Woo Ying Hui, 2026`, carried in every APK |
 
 Before use, install the approved signed build, enable location services, grant location permission, allow notifications, and complete pairing through the office process.
 
@@ -52,6 +53,7 @@ Before use, install the approved signed build, enable location services, grant l
 | New Task control | Protected task transition to prevent accidental task changes. |
 | Push status | Show manual/automatic delivery progress and outcome. |
 | Administrator controls | Protected pairing/release actions. |
+| Version footer | Bottom line of the count screen; names the build (`HAMS 1.2`) so support can identify a handset without a cable. |
 
 **Visual reference:** Leong Kah Choon (`kc.leong@klk.com.my`) is the contact for approved UI screenshots/reference. Woo Ying Hui will incorporate approved visual material into this report.
 

@@ -5,7 +5,7 @@
 
 ## First-response rules
 
-1. Record the unit id, device identifier, time window, app version, and observed symptom.
+1. Record the unit id, device identifier, time window, app version, and observed symptom. The app version is the bottom line of the count screen — ask the worker to read it out; no cable or admin access is needed.
 2. Do not release or re-pair a device merely to troubleshoot a pending push.
 3. Do not edit app source or commit real credentials to diagnose production.
 4. Confirm the device still owns the intended Wialon unit before any release/replacement action.
@@ -32,6 +32,16 @@ adb logcat -s HAMS_UI
 adb logcat | Select-String 'HAMS|Push|Provision'
 adb shell run-as com.klk.hams.debug sqlite3 databases/hams.db "SELECT * FROM tasks ORDER BY updated_at DESC;"
 ```
+
+To identify a build from an APK rather than a running handset:
+
+```powershell
+aapt dump xmltree hams-1.2.apk --file AndroidManifest.xml   # versionCode, versionName, com.klk.hams.author
+apksigner verify --print-certs hams-1.2.apk                 # signer fingerprint
+unzip -p hams-1.2.apk assets/NOTICE.txt                     # authorship record
+```
+
+A release build not signed with `98fb0136385382720339d88aec7db90df8e769101f78a9e22097f28617d44f73` did not come from this project.
 
 The device database is evidence. Copy it before any destructive repair, and do not modify production rows casually.
 

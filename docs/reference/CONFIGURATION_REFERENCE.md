@@ -40,6 +40,7 @@
 | Hold-to-repeat delay / interval | 400 ms / 200 ms up to 1.2; 400 ms / 1500 ms from 1.3 |
 | Minimum interval between recorded presses | none up to 1.2; 1500 ms from 1.3 (`PRESS_MIN_INTERVAL_MS`) |
 | Wire-timestamp drift cap | not applicable up to 1.2; 300 s from 1.3 (`WIRE_TIMESTAMP_MAX_DRIFT_SEC`) |
+| Count-screen version footer | `AppConfig.UI_VERSION_FOOTER` — build name only; blank hides the line |
 
 ## Change rules
 

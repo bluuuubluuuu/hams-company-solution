@@ -35,6 +35,26 @@
 
 Not verified on a handset: the 1.3 press rate limit, its refusal cue, and whether the notification-based count now matches the number of presses. That last one is the acceptance test for 1.3.
 
+## Verified 21 August 2026 — authorship record and version footer
+
+Both builds were rebuilt to carry the authorship record and the count-screen version footer. Checks were run against the APK files, not the build log:
+
+| Check | 1.2 | 1.3 |
+|---|---|---|
+| `versionCode` / `versionName` | 3 / `1.2` | 5 / `1.3` |
+| Signer fingerprint matches the fleet keystore | yes | yes |
+| `assets/NOTICE.txt` present | yes | yes |
+| `com.klk.hams.author` meta-data present | yes | yes |
+| Unit tests, lint | pass | pass |
+
+1.3 was installed over an existing 1.3 on the spare handset; `firstInstallTime` was unchanged, confirming an in-place update that preserved pairing and unsent rows. The installed APK was pulled back and its SHA-256 matched the release file byte for byte.
+
+**Not verified on a handset:**
+
+- **The footer's final wording has never been seen on a screen.** An earlier build showing `HAMS 1.3 (5)` was confirmed visually; the shipped name-only form (`HAMS 1.2` / `HAMS 1.3`) was installed but not observed.
+- **1.2 has not run on any device.** Every attempt was blocked by the Android downgrade rule, since the only available handset already held versionCode 5. 1.2 is verified as a file only — its footer, layout, and behaviour are unproven on hardware. This matters most of the three gaps here, because 1.2 is the build intended for twelve handsets.
+- **Layout at other screen sizes.** The footer takes no fixed height and the surrounding column absorbs the change through `ActionRow`'s weight, but this was only ever exercised at 720x1570 / density 320.
+
 ## Known verification gap
 
 The production Wialon report-template result is still not verified end to end.
