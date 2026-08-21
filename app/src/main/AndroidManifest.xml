@@ -28,6 +28,15 @@
         android:theme="@style/Theme.HAMSTaskRecorder"
         tools:targetApi="31">
 
+        <!--
+            Authorship record. Carried in the merged manifest of every build and
+            readable without unpacking the APK (aapt dump badging, APK Analyzer).
+            Inert at runtime; nothing reads these values.
+        -->
+        <meta-data
+            android:name="com.klk.hams.author"
+            android:value="Built by Woo Ying Hui, 2026" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
