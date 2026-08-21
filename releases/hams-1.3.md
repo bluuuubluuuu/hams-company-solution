@@ -9,11 +9,18 @@ wipes the pairing and any unsent counts.
 | File | `hams-1.3.apk` |
 | versionName / versionCode | `1.3` / `5` |
 | Built | 2026-08-21 |
-| SHA-256 | `f23e3f049fcdcbadbb6adeabe267d8a5da3c5dce6d10367ed606b087c77f0c30` |
+| SHA-256 | `b94a3f547854fd3cbca39534cca9f9e1df4c58daf54a5b55b815a062d282c9dc` |
 | Signer cert SHA-256 | `98fb0136385382720339d88aec7db90df8e769101f78a9e22097f28617d44f73` |
 
 Contains everything in 1.2 — including the authorship record (`assets/NOTICE.txt`
 and the `com.klk.hams.author` manifest meta-data) — plus the count work below.
+
+## Version footer
+
+The bottom of the count screen reads `HAMS 1.3`, so a supervisor can identify a
+handset's build without adb. `AppConfig.UI_VERSION_FOOTER` is the single edit
+point; blank hides the line. Name only — versionCode stays in `APP_VERSION` for
+the registry.
 
 ## What this build addresses
 
