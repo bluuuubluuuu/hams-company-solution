@@ -8,11 +8,12 @@ wipes the pairing and any unsent counts.
 |---|---|
 | File | `hams-1.3.apk` |
 | versionName / versionCode | `1.3` / `5` |
-| Built | 2026-08-20 |
-| SHA-256 | `efa0bca312bb2f39b0ba552403de088210ca47f040c838abc641424d76813750` |
+| Built | 2026-08-21 |
+| SHA-256 | `f23e3f049fcdcbadbb6adeabe267d8a5da3c5dce6d10367ed606b087c77f0c30` |
 | Signer cert SHA-256 | `98fb0136385382720339d88aec7db90df8e769101f78a9e22097f28617d44f73` |
 
-Contains everything in 1.2, plus the count work below.
+Contains everything in 1.2 — including the authorship record (`assets/NOTICE.txt`
+and the `com.klk.hams.author` manifest meta-data) — plus the count work below.
 
 ## What this build addresses
 

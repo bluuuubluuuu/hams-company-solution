@@ -8,8 +8,8 @@ feedback; no change to counting logic, GPS gating, or the Wialon wire format.
 | File | `hams-1.2.apk` |
 | Application ID | `com.klk.hams` |
 | versionName / versionCode | `1.2` / `3` |
-| Built | 2026-08-19 |
-| SHA-256 | `3b11ab9ef2f31c54efbfe098793c94410baa21a2600b028946c22794263ea740` |
+| Built | 2026-08-21 |
+| SHA-256 | `640e3ac711c1c8aafff196b21e01940d3a144c23dace89f39fa2a4540125e9c5` |
 | Signer cert SHA-256 | `98fb0136385382720339d88aec7db90df8e769101f78a9e22097f28617d44f73` |
 | Signer DN | `CN=HAMS Task Recorder, OU=IT, O=KLK, L=Ipoh, ST=Perak, C=MY` |
 | Signature scheme | v2 |
@@ -18,6 +18,15 @@ feedback; no change to counting logic, GPS gating, or the Wialon wire format.
 The signer fingerprint matches `keys/hams-release.jks`, i.e. the key the fleet
 already trusts. Installs in place over 1.1: pairing, `device_fingerprint` and
 unsent event rows are all preserved.
+
+## Authorship record
+
+Every build carries `Built by Woo Ying Hui, 2026` in two places, neither of
+which renders on screen:
+
+- `assets/NOTICE.txt` — `unzip -p hams-1.2.apk assets/NOTICE.txt`
+- manifest `<meta-data android:name="com.klk.hams.author">` — visible to
+  `aapt dump xmltree` or APK Analyzer without unpacking
 
 ## What changed from 1.1
 
@@ -45,9 +54,8 @@ this project has no Robolectric. Behaviour was confirmed by hand instead.
 
 ## Source state
 
-Built from a working tree with uncommitted changes on top of `ca3d055`. **The
-binary is reproducible only if that tree is committed** — see the note in the
-repo before starting 1.3.
+Built from tag `v1.2` plus the authorship record described above, which is the
+only difference from the tagged tree. Reproducible.
 
 ## Next
 

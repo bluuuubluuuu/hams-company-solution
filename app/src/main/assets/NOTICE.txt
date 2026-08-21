@@ -1,0 +1,16 @@
+HAMS Task Recorder
+Built by Woo Ying Hui, 2026
+
+Android application for offline-first task counting with GPS and battery
+telemetry, delivering task events over Wialon IPS.
+
+Application ID: com.klk.hams
+Authorship of this application's source code is recorded in this file and in
+the project's version-control history.
+
+Release builds are signed with the certificate
+
+    CN=HAMS Task Recorder, OU=IT, O=KLK, L=Ipoh, ST=Perak, C=MY
+    SHA-256 98fb0136385382720339d88aec7db90df8e769101f78a9e22097f28617d44f73
+
+A build not carrying that signer fingerprint did not come from this project.
