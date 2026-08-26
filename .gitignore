@@ -74,3 +74,10 @@ _local/
 
 # ==== Archived development history (local reference only; never published) ====
 HAMS_archive/
+
+# ==== Local agent context (deliberately untracked; see 29b2786) ====
+# CLAUDE.md and CONTEXT.md are per-developer working notes, not repository
+# content. They were removed from tracking on purpose - keep them local so a
+# rebase or a fresh branch cannot quietly reintroduce them.
+CLAUDE.md
+CONTEXT.md
