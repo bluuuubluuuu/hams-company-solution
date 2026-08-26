@@ -108,6 +108,49 @@ An office administrator enters the approved unit ID and a valid OTP. The company
 
 > ⚠ Never pair a replacement phone to the same unit while the old phone may contain unsent work.
 
+### 4.3 Pairing and release: precautions and fallback
+
+This section tells the person holding the phone what to do when pairing or release does not go as expected. In the tables below, the **What to do** column is the action to take.
+
+**Before pairing**
+
+1. Take the unit ID from the office register. Do not guess it or type it from memory. The convention is `OC<NUM>_H_<SERIAL_NUMBER>`; a wrong ID either fails outright or binds the phone to the wrong unit.
+2. Confirm the phone has a working network connection. Pairing needs one. GPS is not required until counting starts.
+3. Pair one phone to one unit at a time, and record the pairing in the operational register.
+
+**If pairing does not succeed**
+
+| Message on the phone | What it means | What to do |
+|---|---|---|
+| Unknown unit ID. Check and retry. | The unit is not in the office register. | **Re-check the ID against the register. If it is correct, ask the office to confirm the unit was seeded.** |
+| This device is already bound to another unit. | This phone already owns a different unit. | **Release that unit first, then pair to the new one.** |
+| That unit is bound to another device. | A different phone owns the unit. | **Stop. Do not retry. The office must release the unit before this phone can take it.** |
+| This unit is finishing release from another device. | The previous phone is still inside its protected delivery window. | **Wait a few minutes, then retry. The wait protects counts still being sent.** |
+| Supervisor code rejected. Check and retry. | The code is wrong, expired, or already used. | **Request a fresh code. A code lasts 10 minutes and works once only.** |
+| Supervisor code is not configured. | The office code service is not set up. | **Contact the office administrator. Nothing can be fixed on the phone.** |
+| No connection. Connect and retry. | The phone cannot reach the office service. | **Restore the network and retry. Nothing is lost by retrying.** |
+
+**Before releasing or handing back a phone**
+
+1. Deliver pending counts first, and confirm the push completed.
+2. Only then use the protected administrator release control with a valid supervisor code.
+3. Never uninstall the app to fix a delivery problem. Uninstalling destroys counts that have not been sent, and skips the safe release sequence entirely.
+
+**Fallback when a phone is reset, lost, or damaged**
+
+A factory reset changes the phone's Android identity. The rebuilt phone can no longer prove it owned the unit, so it cannot release the unit itself and cannot simply pair to it again. The office must force-release the unit first. The same unit ID can then be paired to the rebuilt or replacement phone, keeping its identity and its history.
+
+| Scenario | What has happened | Correct response |
+|---|---|---|
+| Phone works and is being reassigned | Normal case. The app can still prove it owns the unit. | **Release from the app with a supervisor code. Pending counts are delivered first.** |
+| Phone was reset without releasing | The register still shows the unit claimed by an identity that no longer exists. | **Ask the office to force-release the unit, then pair the same unit ID again.** |
+| Phone lost, stolen, or dead | The unit stays claimed and no phone is able to release it. | **Ask the office to force-release the unit, then pair the replacement phone.** |
+| App unexpectedly returns to the pairing screen | The unit was released or reassigned somewhere else. | **Stop counting. Do not pair again. Ask the office to check the unit assignment first.** |
+
+> ⚠ Counts still unsent on a phone that is reset, lost, or damaged are permanently lost. Only a release performed from a working phone delivers pending work first.
+
+> ⚠ Do not force-release a unit while the old phone may still be working and holding unsent counts. That phone will stop delivering, and the work it holds is stranded.
+
 ## 5. Technical and backend reference
 
 ### 5.1 Local mobile database
