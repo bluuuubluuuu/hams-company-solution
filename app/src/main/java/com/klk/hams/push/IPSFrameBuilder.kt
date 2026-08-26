@@ -125,9 +125,18 @@ object IPSFrameBuilder {
         val batteryStr = String.format(Locale.US, "%.2f", row.batteryPct ?: 0.0)
         val speed = row.speedKmh ?: 0
 
-        val params = "event_code:1:$code," +
-            "battery:2:$batteryStr," +
-            "work_count:1:0"
+        // lost_* are appended whenever the row carries them — the builder does
+        // not gate on event_code. Today only the release-marker emitters (302
+        // work_stranded / 304 device_unbound) populate them; every other
+        // telemetry row leaves them null, so its frame is byte-identical to
+        // pre-2026-07-23 output.
+        val params = buildString {
+            append("event_code:1:$code,")
+            append("battery:2:$batteryStr,")
+            append("work_count:1:0")
+            row.lostTasks?.let { append(",lost_tasks:1:$it") }
+            row.lostCuts?.let { append(",lost_cuts:1:$it") }
+        }
 
         val frame = "#D#$date;$time;$latStr;N;$lonStr;E;" +
             "$speed;$COURSE;$ALTITUDE;$sats;$hdopStr;" +

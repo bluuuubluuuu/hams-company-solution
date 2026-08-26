@@ -9,7 +9,7 @@
 |---|---|---|
 | `local.properties.example` | Safe Android build-time template. | Tracked |
 | `local.properties` | Real Android build-time values. | Ignored; never share or commit |
-| `config/examples/credentials.env.example` | Safe server-side variable-name template. | Tracked |
+| `credentials.env.example` | Safe server-side variable-name template. | Tracked |
 | Company secret store / n8n credentials | Live backend values. | Company-managed; not in this repository |
 
 ## Android build-time keys
@@ -20,7 +20,7 @@
 | `IPS_HOST`, `IPS_PORT` | Wialon/platform owner | IPS gateway connection. |
 | `DEVICE_UNIQUE_ID` | Development only | Fallback only; office pairing is the production identity. |
 | `MANUAL_CLAIM_URL`, `RELEASE_URL`, `VERIFY_URL` | Company n8n owner | Production HTTPS webhooks. |
-| `OTP_REQUEST_URL` | Company n8n owner | Optional office code-request endpoint. |
+| `OTP_REQUEST_URL` | Company n8n owner | Office code-request endpoint. Blank disables the in-app request button — and with it the automatic registry seeding that rides on the same call. The path must not change: it is compiled into every deployed APK. |
 | `HAMS_CLAIM_SECRET` | Company secret owner | Shared app-to-n8n request secret; compiled into the app, so do not treat it as server-only. |
 | `RELEASE_STORE_*` | Release-signing owner | Signing-keystore location and credentials. |
 
@@ -31,12 +31,16 @@
 | Setting | Current value |
 |---|---|
 | Android minimum / target SDK | 33 / 35 |
-| App version | 1.1 (2) |
+| App version | 1.2 (3) production; 1.3 (5) trial |
 | IPS default | `185.213.1.24:20332` |
 | Task batch limit | 10 |
 | Retry attempts | 5 |
 | Local terminal-data retention | 30 days |
 | Binding revalidation interval | 15 minutes |
+| Hold-to-repeat delay / interval | 400 ms / 200 ms up to 1.2; 400 ms / 1500 ms from 1.3 |
+| Minimum interval between recorded presses | none up to 1.2; 1500 ms from 1.3 (`PRESS_MIN_INTERVAL_MS`) |
+| Wire-timestamp drift cap | not applicable up to 1.2; 300 s from 1.3 (`WIRE_TIMESTAMP_MAX_DRIFT_SEC`) |
+| Count-screen version footer | `AppConfig.UI_VERSION_FOOTER` — build name only; blank hides the line |
 
 ## Change rules
 

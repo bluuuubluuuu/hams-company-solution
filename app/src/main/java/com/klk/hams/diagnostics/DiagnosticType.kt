@@ -15,7 +15,14 @@ enum class DiagnosticType(val wire: String) {
     GPS_RECOVERY("gps_recovery"),
     BINDING_RELEASED("binding_released"),
     DEVICE_BOUND("device_bound"),
-    DEVICE_UNBOUND("device_unbound");
+    DEVICE_UNBOUND("device_unbound"),
+
+    /**
+     * 302 — device unbound via OTP while still holding unsent harvest.
+     * Mutually exclusive with [DEVICE_UNBOUND]: a release emits one or the
+     * other, never both. Carries lost_tasks / lost_cuts params.
+     */
+    WORK_STRANDED("work_stranded");
 
     companion object {
         fun fromAction(action: String?): DiagnosticType? = when (action) {

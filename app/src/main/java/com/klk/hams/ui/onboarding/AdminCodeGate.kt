@@ -16,10 +16,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.klk.hams.provisioning.OtpRequestResult
 import com.klk.hams.provisioning.ReleaseResult
 import com.klk.hams.ui.theme.FieldForest
 import com.klk.hams.ui.theme.FieldForestOn
@@ -27,6 +29,20 @@ import com.klk.hams.ui.theme.FieldHairline
 import com.klk.hams.ui.theme.FieldInk
 import com.klk.hams.ui.theme.FieldInkSoft
 import com.klk.hams.ui.theme.FieldScarlet
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+/** Seconds the "Request code" button stays disabled after a successful send, so
+ *  an impatient worker cannot flood the administrator's mailbox. */
+private const val OTP_REQUEST_COOLDOWN_S = 30
+
+/** Pure: worker-facing text for an OTP request outcome. */
+fun otpRequestMessage(result: OtpRequestResult): String = when (result) {
+    OtpRequestResult.Sent -> "Code sent to the administrator."
+    OtpRequestResult.NotConfigured -> "Code requests are not set up. Ask your supervisor."
+    OtpRequestResult.Unauthorized -> "Setup error (auth). Contact your supervisor."
+    is OtpRequestResult.Error -> "Could not reach the office. Check signal and retry."
+}
 
 private const val ADMIN_CODE_MAX_FAILURES = 5
 private const val ADMIN_CODE_LOCKOUT_MS = 60_000L
@@ -69,8 +85,17 @@ fun AdminCodeDialog(
     onSubmit: (String) -> Unit,
     onDismiss: () -> Unit,
     nowMs: Long = System.currentTimeMillis(),
+    /** Asks the office to issue a code and mail it to the administrator. Null
+     *  hides the button entirely - a build with no OTP_REQUEST_URL behaves
+     *  exactly as before. The code never returns to the phone: possession of a
+     *  handset must not be enough to authorise a pairing. */
+    onRequestCode: (suspend () -> OtpRequestResult)? = null,
 ) {
     var code by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    var requesting by remember { mutableStateOf(false) }
+    var requestNote by remember { mutableStateOf<String?>(null) }
+    var cooldown by remember { mutableStateOf(0) }
     val locked = lockout.isLocked(nowMs)
     val lockoutText = if (locked) {
         "Too many attempts. Try again in ${lockout.remainingSeconds(nowMs)}s."
@@ -105,6 +130,39 @@ fun AdminCodeDialog(
                 if (problem != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(problem, color = FieldScarlet, style = MaterialTheme.typography.bodySmall)
+                }
+                if (onRequestCode != null) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        enabled = !busy && !requesting && cooldown == 0,
+                        onClick = {
+                            requestNote = null
+                            requesting = true
+                            scope.launch {
+                                val result = onRequestCode()
+                                requestNote = otpRequestMessage(result)
+                                requesting = false
+                                if (result is OtpRequestResult.Sent) {
+                                    // Cooldown only on success: a failed request
+                                    // should be retryable immediately.
+                                    cooldown = OTP_REQUEST_COOLDOWN_S
+                                    while (cooldown > 0) { delay(1_000); cooldown-- }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = FieldForest),
+                    ) {
+                        Text(
+                            when {
+                                requesting -> "Requesting…"
+                                cooldown > 0 -> "Request code (${cooldown}s)"
+                                else -> "Request code"
+                            }
+                        )
+                    }
+                    requestNote?.let {
+                        Text(it, color = FieldInkSoft, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         },

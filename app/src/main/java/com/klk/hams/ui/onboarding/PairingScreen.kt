@@ -44,6 +44,7 @@ import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
+import com.klk.hams.provisioning.VerifyResult
 import com.klk.hams.ui.theme.FieldForest
 import com.klk.hams.ui.theme.FieldForestOn
 import com.klk.hams.ui.theme.FieldHairline
@@ -51,6 +52,7 @@ import com.klk.hams.ui.theme.FieldInk
 import com.klk.hams.ui.theme.FieldInkSoft
 import com.klk.hams.ui.theme.FieldScarlet
 import com.klk.hams.ui.theme.FieldSlate
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -270,6 +272,16 @@ fun PairingScreen(
             lockout = adminLockout,
             error = adminError,
             onDismiss = { adminAction = null; adminError = null },
+            // Pairing: the code is for the unit being typed in. On a
+            // release-and-bind it is the unit being released.
+            onRequestCode = {
+                client.requestOtp(
+                    when (action) {
+                        PairingAdminAction.BindTypedUnit -> unitId
+                        is PairingAdminAction.ReleaseAndBind -> action.ownedUnit
+                    }
+                )
+            },
             onSubmit = { code ->
                 val fp = fingerprint
                 if (fp == null) {
@@ -301,10 +313,28 @@ fun PairingScreen(
                             }
                         }
                         is PairingAdminAction.ReleaseAndBind -> {
+                            val owned = client.verify(action.ownedUnit, fp) == VerifyResult.Bound
+                            val snapshot = app.applicationScope.async {
+                                ProvisioningEvents.deliverBeforeRelease(app, action.ownedUnit, deliver = owned)
+                            }.await()
                             when (val release = client.release(action.ownedUnit, fp, code)) {
                                 ReleaseResult.Success -> {
-                                    // 304 for the unit we just released, before re-binding.
-                                    ProvisioningEvents.recordAndPushUnbound(app, action.ownedUnit)
+                                    // 302/304 for the unit we just released, BEFORE
+                                    // re-binding. This is the release-then-rebind
+                                    // sequence that produced the A1 mis-attribution
+                                    // defect (2026-07-10): any row left pending here
+                                    // would push under the unit claimed on the next
+                                    // line. The release path strands them instead.
+                                    //
+                                    // Runs on the application scope so an Activity
+                                    // recreation (armband flip — sensorPortrait, no
+                                    // configChanges) cannot cut the sequence between
+                                    // its marker push and its strand. The await keeps
+                                    // the ordering: no manualClaim until the release
+                                    // sequence has fully completed.
+                                    app.applicationScope.async {
+                                        ProvisioningEvents.markAndStrand(app, action.ownedUnit, snapshot)
+                                    }.await()
                                     when (val bind = client.manualClaim(unitId, fp, code)) {
                                     is BindResult.Success -> completePairing(bind.uniqueId)
                                     BindResult.AdminAuthFailed -> {

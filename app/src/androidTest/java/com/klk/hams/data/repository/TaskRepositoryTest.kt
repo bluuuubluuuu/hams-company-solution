@@ -283,7 +283,146 @@ class TaskRepositoryTest {
         assertEquals("screen_off", rows.first().type)
     }
 
+    // ---- 302 work_stranded — leftover accounting (2026-07-23) ----
+
+    @Test fun countUnsentWork_countsTasksAndCutsSeparately() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 35)    // beacon — not a cut
+        val taskB = insertPendingTask()
+        insertEvent(taskB, pushed = 0, eventCode = 179)
+        insertEvent(taskB, pushed = 1, eventCode = 179)   // already uploaded
+
+        val unsent = repo.countUnsentWork()
+
+        assertEquals(2, unsent.tasks)
+        assertEquals(3, unsent.cuts)   // 179 at pushed = 0 only
+    }
+
+    @Test fun countUnsentWork_ignoresAlreadyStrandedRows() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 2, eventCode = 179)
+
+        val unsent = repo.countUnsentWork()
+
+        // A later release must not re-report work stranded by an earlier one.
+        assertEquals(0, unsent.tasks)
+        assertEquals(0, unsent.cuts)
+    }
+
+    @Test fun strandUnsentWork_marksRowsRejected_andTaskFailed() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 0, eventCode = 179)
+        insertEvent(taskId, pushed = 0, eventCode = 35)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(2, stranded)                       // 35 is stranded too
+        assertEquals(0, repo.countUnsentWork().cuts)
+        assertEquals(0, repo.pendingTasks().size)
+        assertNotNull(taskById(taskId, "failed"))
+    }
+
+    /**
+     * Three-way outcome: only `pushed = 0` moves. Uploaded work must never be
+     * resurrected as rejected, and rows stranded by an earlier release must not
+     * be touched a second time.
+     */
+    @Test fun strandUnsentWork_leavesUploadedAndAlreadyStrandedRowsUntouched() = runBlocking {
+        val taskId = insertPendingTask()
+        val pendingRow = insertEvent(taskId, pushed = 0, eventCode = 179)
+        val uploadedRow = insertEvent(taskId, pushed = 1, eventCode = 179)
+        val strandedRow = insertEvent(taskId, pushed = 2, eventCode = 179)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(1, stranded)
+        assertEquals(2, pushedStateOf(pendingRow))
+        assertEquals(1, pushedStateOf(uploadedRow))
+        assertEquals(2, pushedStateOf(strandedRow))
+        assertNotNull(taskById(taskId, "failed"))
+    }
+
+    @Test fun strandUnsentWork_noPendingRows_isNoOp() = runBlocking {
+        val taskId = insertPendingTask()
+        insertEvent(taskId, pushed = 1, eventCode = 179)
+
+        val stranded = repo.strandUnsentWork()
+
+        assertEquals(0, stranded)
+        assertNotNull(taskById(taskId, "uploaded"))
+        assertNull(taskById(taskId, "failed"))
+    }
+
+    // ---- Approach A - snapshot accounting (2026-07-23) ----
+
+    @Test fun pendingCutIds_returnsOnly179AtPushedZero() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 1, eventCode = 179)   // already delivered
+        insertEvent(taskA, pushed = 0, eventCode = 35)    // beacon, not a cut
+
+        val snapshot = repo.pendingCutIds()
+
+        assertEquals(2, snapshot.size)   // the two pushed=0 179 rows only
+    }
+
+    @Test fun lostAmong_countsSnapshotCutsNotUploaded_afterDeliver() = runBlocking {
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+        insertEvent(taskA, pushed = 0, eventCode = 179)
+
+        val snapshot = repo.pendingCutIds()               // taken BEFORE deliver
+        assertEquals(3, snapshot.size)
+
+        // Simulate the deliver outcome using the ids the snapshot actually returned
+        // (no id arithmetic): one delivered, one rejected, one left un-sent.
+        repo.markEventUploaded(snapshot[0])               // pushed -> 1 (delivered)
+        repo.markEventRejected(snapshot[1], "frame rejected")  // pushed -> 2 (lost)
+        // snapshot[2] stays pushed=0 (timed out mid-deliver) -> lost
+
+        val lost = repo.lostAmong(snapshot)
+
+        assertEquals(2, lost.cuts)    // rejected + still-unsent count as lost; delivered does not
+        assertEquals(1, lost.tasks)
+    }
+
+    @Test fun lostAmong_emptySnapshot_isZero() = runBlocking {
+        val lost = repo.lostAmong(emptyList())
+        assertEquals(0, lost.cuts)
+        assertEquals(0, lost.tasks)
+    }
+
+    @Test fun markEventUploaded_doesNotResurrectAStrandedRow() = runBlocking {
+        // Review finding P1a: a stranded row (pushed=2) must never flip to 1 on a
+        // late worker ack. The guarded query only moves 0 -> 1.
+        val taskA = insertPendingTask()
+        insertEvent(taskA, pushed = 2, eventCode = 179)   // already stranded
+        val strandedId = db.eventDao().pendingCutIds()     // empty - it's not pending
+        assertEquals(0, strandedId.size)
+
+        // Find the stranded row's id and try to mark it uploaded.
+        val id = db.eventDao().let {
+            // the only event we inserted; id is 1 in a fresh in-memory db
+            1L
+        }
+        repo.markEventUploaded(id)
+
+        // It stays stranded - the guard blocked the 2 -> 1 transition.
+        val lost = repo.lostAmong(listOf(id))
+        assertEquals(1, lost.cuts)   // still counted as not-uploaded
+    }
+
     // ---- helpers ----
+
+    private fun pushedStateOf(eventId: Long): Int =
+        db.query("SELECT pushed FROM events WHERE id = ?", arrayOf<Any>(eventId)).use {
+            assertEquals(true, it.moveToFirst())
+            it.getInt(0)
+        }
 
     private suspend fun insertPendingTask(): Long {
         val now = "2026-05-15T00:00:00Z"
@@ -305,8 +444,8 @@ class TaskRepositoryTest {
         )
     }
 
-    private suspend fun insertEvent(taskId: Long, pushed: Int, eventCode: Int) {
-        db.eventDao().insert(
+    private suspend fun insertEvent(taskId: Long, pushed: Int, eventCode: Int): Long {
+        return db.eventDao().insert(
             EventEntity(
                 taskId = taskId,
                 eventType = "plus",

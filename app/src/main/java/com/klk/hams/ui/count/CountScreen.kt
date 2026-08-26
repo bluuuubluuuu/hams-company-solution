@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -43,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -57,8 +57,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -189,6 +187,16 @@ private fun CountingContent(
     val context = LocalContext.current
     var showAdmin by remember { mutableStateOf(false) }
 
+    // Audible + haptic cue per press outcome. Held for the screen's lifetime so
+    // SoundPool loads its samples once, and released on dispose.
+    val feedback = remember(context) { FieldFeedback(context) }
+    DisposableEffect(feedback) {
+        onDispose { feedback.release() }
+    }
+    LaunchedEffect(vm, feedback) {
+        vm.pressFeedback.collect { feedback.play(it) }
+    }
+
     if (state.showNewTaskDialog) NewTaskDialog(state, vm)
 
     if (state.showNotificationPanel) {
@@ -293,6 +301,8 @@ private fun CountingContent(
                 context = context,
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(10.dp))
+            VersionFootnote(modifier = Modifier.fillMaxWidth())
         }
 
         if (state.manualPushActive) {
@@ -680,25 +690,8 @@ private fun StatusPill(
     }
 }
 
-@Composable
-private fun PendingBadge(count: Int, modifier: Modifier = Modifier) {
-    if (count <= 0) return
-    val label = if (count > 99) "99+" else count.toString()
-    Surface(
-        modifier = modifier.heightIn(min = 28.dp),
-        shape = RoundedCornerShape(50),
-        color = FieldForest,
-        contentColor = FieldForestOn
-    ) {
-        Text(
-            text = "↑ $label",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1
-        )
-    }
-}
+// (PendingBadge - a standalone pending-count pill - was removed 2026-08-05.
+//  It had no callers: the badge that ships is the one drawn inside PushButton.)
 
 // ---------------------------------------------------------------------------
 // Count card — fixed 180dp, 120sp digits
@@ -748,6 +741,32 @@ private fun CountCard(count: Int, atMax: Boolean, modifier: Modifier = Modifier)
 // Action row — hero + circle centered, small − circle bottom-left
 // ---------------------------------------------------------------------------
 
+/**
+ * Build identity, bottom of the count screen. Deliberately quiet - it is for a
+ * supervisor answering "which build is this handset on?", not for the worker.
+ *
+ * Text comes from [AppConfig.UI_VERSION_FOOTER]; a blank value renders nothing
+ * and gives its space back to the buttons above.
+ *
+ * Sizing follows the rest of this screen: no fixed height, so it grows with the
+ * user's font-scale setting instead of clipping, and the surrounding Column
+ * absorbs the change through ActionRow's weight.
+ */
+@Composable
+private fun VersionFootnote(modifier: Modifier = Modifier) {
+    val label = AppConfig.UI_VERSION_FOOTER
+    if (label.isBlank()) return
+    Text(
+        label,
+        modifier = modifier,
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodySmall,
+        color = FieldInkSoft,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
 @Composable
 private fun ActionRow(
     state: CountUiState,
@@ -760,22 +779,10 @@ private fun ActionRow(
     var minusJob by remember { mutableStateOf<Job?>(null) }
     var plusJob by remember { mutableStateOf<Job?>(null) }
 
-    // Field feedback 2026-07-15: a short vibration per recorded press, so a
-    // worker not looking at the screen feels each cut register. Uses the Vibrator
-    // directly (not performHapticFeedback) so it fires even when the device's
-    // touch-vibration system setting is off. Fires once per press and per
-    // auto-repeat tick. minSdk 33 → VibratorManager always available.
-    val context = LocalContext.current
-    val vibrator = remember(context) {
-        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-    }
-    fun tick() {
-        if (vibrator.hasVibrator()) {
-            vibrator.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
-        }
-    }
-    val doPlus = { tick(); onPlus() }
-    val doMinus = { tick(); onMinus() }
+    // Feedback is NOT fired here. A press can be refused (stale GPS, at the
+    // per-task ceiling, push in progress), and cueing on touch used to promise a
+    // count that was never stored. CountViewModel.pressFeedback reports the real
+    // outcome; CountScreen plays it.
 
     // Everything below is sized from the actual space this composable is given
     // (BoxWithConstraints), not fixed dp — so the buttons and their glyphs scale
@@ -813,15 +820,19 @@ private fun ActionRow(
                     labelLineHeight = plusLine,
                     container = if (state.canIncrement) FieldForest else FieldHairline,
                     onContainer = if (state.canIncrement) FieldForestOn else FieldSlate,
-                    enabled = state.canIncrement,
                     onPressStart = {
-                        doPlus()
+                        onPlus()
                         plusJob?.cancel()
-                        plusJob = scope.launch {
-                            delay(400)
-                            while (isActive) {
-                                doPlus()
-                                delay(200)
+                        plusJob = null
+                        // Hold-to-repeat only while presses are being accepted,
+                        // so a refused press cues once instead of machine-gunning.
+                        if (state.canIncrement) {
+                            plusJob = scope.launch {
+                                delay(AppConfig.PRESS_REPEAT_DELAY_MS)
+                                while (isActive) {
+                                    onPlus()
+                                    delay(AppConfig.PRESS_REPEAT_INTERVAL_MS)
+                                }
                             }
                         }
                     },
@@ -839,15 +850,17 @@ private fun ActionRow(
                     labelLineHeight = minusLine,
                     container = if (state.canDecrement) FieldEarth else FieldHairline,
                     onContainer = if (state.canDecrement) FieldEarthOn else FieldSlate,
-                    enabled = state.canDecrement,
                     onPressStart = {
-                        doMinus()
+                        onMinus()
                         minusJob?.cancel()
-                        minusJob = scope.launch {
-                            delay(400)
-                            while (isActive) {
-                                doMinus()
-                                delay(200)
+                        minusJob = null
+                        if (state.canDecrement) {
+                            minusJob = scope.launch {
+                                delay(AppConfig.PRESS_REPEAT_DELAY_MS)
+                                while (isActive) {
+                                    onMinus()
+                                    delay(AppConfig.PRESS_REPEAT_INTERVAL_MS)
+                                }
                             }
                         }
                     },
@@ -865,26 +878,29 @@ private fun CircleActionButton(
     caption: String?,
     container: Color,
     onContainer: Color,
-    enabled: Boolean,
     onPressStart: () -> Unit,
     onPressEnd: () -> Unit,
     modifier: Modifier = Modifier,
     labelFontSize: TextUnit = 88.sp,
     labelLineHeight: TextUnit = 96.sp
 ) {
-    // pointerInput keyed on Unit (NOT enabled). Keying on enabled caused a
-    // gesture-replay bug: pressing + made canDecrement flip false→true on the
-    // sibling button, re-keying its pointerInput, which cancelled+restarted
-    // the gesture detector — and any in-flight pointer could replay as a new
-    // press, firing onMinus on a sibling that was just enabled. The enabled
-    // check now lives inside the gesture via rememberUpdatedState so the
-    // detector stays alive for the lifetime of the composable.
-    val enabledRef by rememberUpdatedState(enabled)
+    // pointerInput keyed on Unit, never on a changing enabled flag. Keying on
+    // one caused a gesture-replay bug: pressing + made canDecrement flip
+    // false→true on the sibling button, re-keying its pointerInput, which
+    // cancelled+restarted the gesture detector — and any in-flight pointer could
+    // replay as a new press, firing onMinus on a sibling that was just enabled.
+    // Keying on Unit keeps the detector alive for the composable's lifetime, so
+    // there is nothing to restart and nothing to replay.
+    //
+    // The press is deliberately NOT gated here any more. Every press reaches the
+    // ViewModel so a refusal can be announced (2026-08-19: a disabled button
+    // swallowed stale-GPS presses in silence, which field workers reported as
+    // "no vibration"). The ViewModel remains the sole authority on whether a
+    // count is recorded — GPS gating is unchanged.
     Surface(
         modifier = modifier.pointerInput(Unit) {
             detectTapGestures(
                 onPress = {
-                    if (!enabledRef) return@detectTapGestures
                     onPressStart()
                     tryAwaitRelease()
                     onPressEnd()

@@ -23,6 +23,19 @@ sealed interface ReleaseResult {
     data class Error(val reason: String) : ReleaseResult
 }
 
+/**
+ * Outcome of an OTP request. The code itself is NEVER returned to the phone -
+ * the backend mails it to the administrator, who reads it back to whoever holds
+ * the handset. That separation is the point: possession of a phone must not be
+ * enough to authorise a pairing.
+ */
+sealed interface OtpRequestResult {
+    data object Sent : OtpRequestResult              // backend accepted the request
+    data object NotConfigured : OtpRequestResult     // OTP_REQUEST_URL blank in this build
+    data object Unauthorized : OtpRequestResult      // 401 - shared secret rejected
+    data class Error(val reason: String) : OtpRequestResult
+}
+
 /** Outcome of a /verify (binding re-check) call. */
 sealed interface VerifyResult {
     data object Bound : VerifyResult

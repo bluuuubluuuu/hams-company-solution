@@ -1,25 +1,20 @@
 package com.klk.hams.provisioning
 
+import com.klk.hams.AppConfig
 import com.klk.hams.HamsApp
+import com.klk.hams.data.repository.TaskRepository
 import com.klk.hams.diagnostics.DiagnosticType
+import com.klk.hams.push.PushGate
 import com.klk.hams.push.TelemetryPushEngine
 import com.klk.hams.push.WialonIPSClient
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 
-/**
- * Bind/unbind lifecycle markers pushed to Wialon at the moment the behaviour is
- * detected. Both OTP bind (manual_claim) and OTP unbind (release) are inherently
- * online — they just reached the n8n webhook — so an inline push to the Wialon
- * IPS gateway right then reliably lands.
- *
- * - 303 device_bound: worker paired a device (pushed to the just-bound unit).
- * - 304 device_unbound: worker released a device (pushed to that unit BEFORE the
- *   binding is cleared; if the Wialon gateway is unreachable it is marked
- *   non-resendable so it can never later land on a different unit).
- */
+/** Lifecycle markers for OTP bind and release. */
 object ProvisioningEvents {
 
-    /** Record + push 303 to [uniqueId] (the unit just bound). Left pending on a
-     *  gateway miss — the device stays bound, so it retries under the same unit. */
+    /** Record and push 303 to the unit just bound. */
     suspend fun recordAndPushBound(app: HamsApp, uniqueId: String) {
         app.repository.recordDiagnostic(
             type = DiagnosticType.DEVICE_BOUND,
@@ -30,21 +25,90 @@ object ProvisioningEvents {
         drainTelemetry(app, uniqueId)
     }
 
-    /** Record + push 304 to [uniqueId] (the unit being released) BEFORE the
-     *  caller clears the binding. If it does not land, mark it rejected so the
-     *  pending row can never later push under the fallback/next unit. */
-    suspend fun recordAndPushUnbound(app: HamsApp, uniqueId: String) {
+    fun releaseTypeFor(unsent: TaskRepository.UnsentWork): DiagnosticType =
+        if (unsent.cuts > 0) DiagnosticType.WORK_STRANDED else DiagnosticType.DEVICE_UNBOUND
+
+    /** Record and push the 302 or 304 marker under the unit being left. */
+    suspend fun recordAndPushRelease(
+        app: HamsApp,
+        uniqueId: String,
+        unsent: TaskRepository.UnsentWork,
+    ): Boolean {
         val id = app.repository.recordDiagnostic(
-            type = DiagnosticType.DEVICE_UNBOUND,
+            type = releaseTypeFor(unsent),
             batteryPct = BindingRevalidator.readBatteryPct(app),
             snapshot = app.locationStream.snapshotFlow.value,
             pushed = 0,
+            lostTasks = null,
+            lostCuts = unsent.cuts.takeIf { it > 0 },
         )
+        val pendingIds = app.repository.pendingTelemetryIds()
         drainTelemetry(app, uniqueId)
-        if (app.repository.diagnosticPushedState(id) != 1) {
-            app.repository.markTelemetryRejected(id)
+        for (rowId in pendingIds) {
+            if (app.repository.diagnosticPushedState(rowId) != 1) {
+                app.repository.markTelemetryRejected(rowId)
+            }
         }
+        return app.repository.diagnosticPushedState(id) == 1
     }
+
+    data class ReleaseOutcome(val landed: Boolean, val lost: TaskRepository.UnsentWork)
+
+    /**
+     * Phase 1: finalize and snapshot pending cut ids while the phone still owns
+     * the unit. Delivery is skipped unless the caller's ownership preflight passed.
+     */
+    suspend fun deliverBeforeRelease(
+        app: HamsApp,
+        uniqueId: String,
+        deliver: Boolean,
+    ): List<Long> {
+        app.repository.finalizeActiveTaskForRelease()
+        val snapshot = app.repository.pendingCutIds()
+        if (deliver) {
+            try {
+                withTimeout(AppConfig.DELIVER_BUDGET_MS) {
+                    PushGate.mutex.withLock {
+                        buildReleaseDeliveryEngine(app, uniqueId).run()
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                // Partial delivery is measured by the snapshot after this returns.
+            }
+        }
+        return snapshot
+    }
+
+    /** Phase 2: count the remaining snapshot rows, marker, then always strand. */
+    suspend fun markAndStrand(
+        app: HamsApp,
+        uniqueId: String,
+        snapshot: List<Long>,
+    ): ReleaseOutcome = runMarkAndStrand(
+        countLost = { app.repository.lostAmong(snapshot) },
+        pushMarker = { lost -> recordAndPushRelease(app, uniqueId, lost) },
+        strandUnsentWork = { app.repository.strandUnsentWork() },
+    )
+
+    /** JVM-testable count, marker, and unconditional strand sequence. */
+    suspend fun runMarkAndStrand(
+        countLost: suspend () -> TaskRepository.UnsentWork,
+        pushMarker: suspend (TaskRepository.UnsentWork) -> Boolean,
+        strandUnsentWork: suspend () -> Unit,
+    ): ReleaseOutcome {
+        val lost = countLost()
+        val landed = pushMarker(lost)
+        strandUnsentWork()
+        return ReleaseOutcome(landed = landed, lost = lost)
+    }
+
+    private fun buildReleaseDeliveryEngine(app: HamsApp, uniqueId: String) =
+        com.klk.hams.push.PushEngine(
+            repo = com.klk.hams.push.PushRepositoryImpl(app.repository),
+            senderFactory = { WialonIPSClient(uniqueId = uniqueId) },
+            maxAttempts = 1,
+            backoffScheduleMs = listOf(0L),
+        )
 
     private suspend fun drainTelemetry(app: HamsApp, uniqueId: String) {
         try {
@@ -52,8 +116,10 @@ object ProvisioningEvents {
                 repo = app.repository,
                 senderFactory = { WialonIPSClient(uniqueId = uniqueId) },
             ).run()
+        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+            throw c
         } catch (_: Throwable) {
-            // best-effort at behaviour time; a pending row retries later
+            // Best effort at release time; rejected rows cannot cross to a new unit.
         }
     }
 }

@@ -16,6 +16,7 @@ import com.klk.hams.data.db.MIGRATION_1_2
 import com.klk.hams.data.db.MIGRATION_2_3
 import com.klk.hams.data.db.MIGRATION_3_4
 import com.klk.hams.data.db.MIGRATION_4_5
+import com.klk.hams.data.db.MIGRATION_5_6
 import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
 import com.klk.hams.push.BindingCheckWorker
@@ -36,7 +37,9 @@ class HamsApp : Application() {
 
     val database: AppDatabase by lazy {
         Room.databaseBuilder(applicationContext, AppDatabase::class.java, "hams.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+            )
             .build()
     }
 
@@ -60,7 +63,14 @@ class HamsApp : Application() {
         com.klk.hams.provisioning.BindingRevalidator(this)
     }
 
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Process-lifetime scope. Exposed so UI call sites can run the durable part
+     * of a provisioning release here instead of on `rememberCoroutineScope()` —
+     * `MainActivity` has no `android:configChanges`, so an armband flip
+     * (`sensorPortrait` allows 0° and 180°) recreates the Activity and would
+     * otherwise cancel the sequence between its push and its strand.
+     */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()

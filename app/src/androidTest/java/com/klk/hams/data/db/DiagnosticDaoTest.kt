@@ -81,4 +81,31 @@ class DiagnosticDaoTest {
         dao.markRejected(id2)
         assertEquals(0, dao.pending().size)
     }
+
+    @Test
+    fun pendingIds_returnsOnlyUnpushed_oldestFirst() = runBlocking {
+        dao.insert(
+            DiagnosticEntity(
+                type = "boot", timestamp = "2026-07-23T02:00:00Z",
+                batteryPct = 80.0, createdAt = "x", pushed = 0,
+            )
+        )
+        val older = dao.insert(
+            DiagnosticEntity(
+                type = "gps_lost", timestamp = "2026-07-23T01:00:00Z",
+                batteryPct = 80.0, createdAt = "x", pushed = 0,
+            )
+        )
+        dao.insert(
+            DiagnosticEntity(
+                type = "screen_on", timestamp = "2026-07-23T03:00:00Z",
+                batteryPct = 80.0, createdAt = "x", pushed = 1,
+            )
+        )
+
+        val ids = dao.pendingIds()
+
+        assertEquals(2, ids.size)
+        assertEquals(older, ids.first())   // ordered by timestamp ASC
+    }
 }

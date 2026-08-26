@@ -18,8 +18,11 @@ import com.klk.hams.data.location.LocationStream
 import com.klk.hams.data.repository.TaskRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,6 +38,19 @@ class CountViewModel(
 
     private val _uiState = MutableStateFlow(CountUiState())
     val uiState: StateFlow<CountUiState> = _uiState.asStateFlow()
+
+    // Press outcomes for the UI's audible/haptic cues. Buffered and never
+    // suspending: a dropped cue must never stall or reorder the count path.
+    private val _pressFeedback = MutableSharedFlow<PressFeedback>(
+        extraBufferCapacity = PRESS_FEEDBACK_BUFFER
+    )
+    val pressFeedback: SharedFlow<PressFeedback> = _pressFeedback.asSharedFlow()
+
+    // Press rate limit, tracked per button so a - correction straight after a +
+    // is never blocked. Monotonic clock: a wall-clock correction must never
+    // swallow a press.
+    private var lastPlusAcceptedMs: Long = Long.MIN_VALUE
+    private var lastMinusAcceptedMs: Long = Long.MIN_VALUE
 
     private var nextTaskSeq: Int = 1
     private var newTaskHoldJob: Job? = null
@@ -160,40 +176,71 @@ class CountViewModel(
     }
 
     fun onPlus() {
+        // Announced, never silent. This limit refuses presses the worker really
+        // made, so it must be heard - an unannounced rejection is the invisible
+        // loss this whole change exists to remove.
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!PressRateLimiter.accepts(nowMs, lastPlusAcceptedMs, AppConfig.PRESS_MIN_INTERVAL_MS)) {
+            Log.d(TAG, "onPlus REJECTED: too soon after last press")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
+            return
+        }
+
         val state = _uiState.value
         if (!state.canIncrement) {
             Log.d(TAG, "onPlus REJECTED: count=${state.count}, lock=${state.gpsLockState}")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
             return
         }
         val snapshot = locationStream.snapshotFlow.value
         if (snapshot == null || !LocationStream.isFresh(snapshot)) {
             Log.d(TAG, "onPlus REJECTED: snapshot null or stale")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
             return
         }
         val battery = batteryMonitor.currentPct().toDouble()
+        lastPlusAcceptedMs = nowMs
         Log.d(TAG, "onPlus ACCEPTED: count=${state.count} -> recording")
         viewModelScope.launch {
             val result = repository.recordPlus(snapshot, battery)
             Log.d(TAG, "onPlus DONE: recorded eventId=${result?.id}, workCount=${result?.workCount}")
+            // Cue only after the row exists, so a buzz can never promise a count
+            // that was not stored.
+            _pressFeedback.tryEmit(
+                if (result != null) PressFeedback.PlusRecorded else PressFeedback.Refused
+            )
         }
     }
 
     fun onMinus() {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!PressRateLimiter.accepts(nowMs, lastMinusAcceptedMs, AppConfig.PRESS_MIN_INTERVAL_MS)) {
+            Log.d(TAG, "onMinus REJECTED: too soon after last press")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
+            return
+        }
+
         val state = _uiState.value
         if (!state.canDecrement) {
             Log.d(TAG, "onMinus REJECTED: count=${state.count}, lock=${state.gpsLockState}")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
             return
         }
         val snapshot = locationStream.snapshotFlow.value
         if (snapshot == null || !LocationStream.isFresh(snapshot)) {
             Log.d(TAG, "onMinus REJECTED: snapshot null or stale")
+            _pressFeedback.tryEmit(PressFeedback.Refused)
             return
         }
         val battery = batteryMonitor.currentPct().toDouble()
+        lastMinusAcceptedMs = nowMs
         Log.d(TAG, "onMinus ACCEPTED: count=${state.count} -> recording")
         viewModelScope.launch {
             val result = repository.recordMinus(snapshot, battery)
             Log.d(TAG, "onMinus DONE: recorded eventId=${result?.id}, workCount=${result?.workCount}")
+            _pressFeedback.tryEmit(
+                if (result != null) PressFeedback.MinusRecorded else PressFeedback.Refused
+            )
         }
     }
 
@@ -343,6 +390,9 @@ class CountViewModel(
     companion object {
         private const val STALE_RECHECK_MS: Long = 1_000
         private const val TAG = "HAMS_UI"
+
+        // Deep enough to absorb an auto-repeat burst without dropping cues.
+        private const val PRESS_FEEDBACK_BUFFER = 16
 
         /**
          * Pure hysteresis decision (Task 20). No Android deps — JVM testable.

@@ -32,12 +32,14 @@ import com.klk.hams.provisioning.ProvisioningClient
 import com.klk.hams.provisioning.ProvisioningEvents
 import com.klk.hams.provisioning.ProvisioningStore
 import com.klk.hams.provisioning.ReleaseResult
+import com.klk.hams.provisioning.VerifyResult
 import com.klk.hams.ui.theme.FieldForest
 import com.klk.hams.ui.theme.FieldForestOn
 import com.klk.hams.ui.theme.FieldHairline
 import com.klk.hams.ui.theme.FieldInk
 import com.klk.hams.ui.theme.FieldInkSoft
 import com.klk.hams.ui.theme.FieldScarlet
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 private sealed interface AdminSheetAction {
@@ -69,6 +71,10 @@ fun AdminSheet(
     var adminAction by remember { mutableStateOf<AdminSheetAction?>(null) }
     var adminError by remember { mutableStateOf<String?>(null) }
     var adminLockout by remember { mutableStateOf(AdminCodeLockout()) }
+    // true = the release is done and `status` carries an outcome the admin must
+    // read (discarded work, and/or no Wialon receipt). onReset() wipes `status`,
+    // so navigation is deferred to the sheet's own dismiss on this path.
+    var resetOnDismiss by remember { mutableStateOf(false) }
     val currentId = store.uniqueIdOrNull() ?: "(unpaired)"
 
     // Release this device's current unit (fingerprint-scoped), clear local, return
@@ -89,17 +95,57 @@ fun AdminSheet(
             }
             busy = true
             scope.launch {
+                // Shared by Success and NotFound: both end the binding, so both
+                // must flush the marker under the OLD unit before store.clear().
+                status = "Delivering cuts..."
+                val owned = client.verify(id, fp) == VerifyResult.Bound
+                val snapshot = app.applicationScope.async {
+                    ProvisioningEvents.deliverBeforeRelease(app, id, deliver = owned)
+                }.await()
+
+                suspend fun finishRelease() {
+                    // Durable half runs on the application scope: an armband flip
+                    // recreates MainActivity and cancels `scope`, and a sequence cut
+                    // between the marker push and the strand either misfiles the
+                    // harvest onto the next unit or destroys it while still bound.
+                    // Only the await below is cancellable.
+                    val outcome = app.applicationScope.async {
+                        val o = ProvisioningEvents.markAndStrand(app, id, snapshot)
+                        store.clear()
+                        o
+                    }.await()
+
+                    val lost = outcome.lost
+                    val discarded = if (lost.cuts > 0) {
+                        "Released. ${lost.cuts} cuts could not be delivered."
+                    } else {
+                        null
+                    }
+                    val unconfirmed = if (!outcome.landed) {
+                        "Wialon did not confirm the release."
+                    } else {
+                        null
+                    }
+                    val report = listOfNotNull(discarded, unconfirmed).joinToString(" ")
+                    if (report.isEmpty()) {
+                        // Clean release, receipt held: stay quiet, as before.
+                        onReset()
+                    } else {
+                        status = "$report Close to continue."
+                        adminAction = null
+                        // busy stays true: the unit is already released, so no
+                        // further sheet action is meaningful until the reset lands.
+                        resetOnDismiss = true
+                    }
+                }
+
+                status = "Confirming release..."
                 when (val release = client.release(id, fp, adminCode)) {
-                    ReleaseResult.Success -> {
-                        // 304 device_unbound: push to Wialon before clearing (unbind is online).
-                        ProvisioningEvents.recordAndPushUnbound(app, id)
-                        store.clear()
-                        onReset()
-                    }
-                    ReleaseResult.NotFound -> {
-                        store.clear()
-                        onReset()
-                    }
+                    ReleaseResult.Success -> finishRelease()
+                    // 404/409 — not found, or not the owner. The binding still ends
+                    // locally, and this is the messy path most likely to be carrying
+                    // unsent work, so it gets the same marker (was silent before).
+                    ReleaseResult.NotFound -> finishRelease()
                     ReleaseResult.AdminAuthFailed -> {
                         rememberAdminFailure(releaseFailureMessage(release))
                         busy = false
@@ -147,7 +193,7 @@ fun AdminSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (resetOnDismiss) onReset() else onDismiss() },
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -233,6 +279,9 @@ fun AdminSheet(
             lockout = adminLockout,
             error = adminError,
             onDismiss = { if (!busy) { adminAction = null; adminError = null } },
+            // Reset: only the app knows which unit this handset currently holds,
+            // so the admin's email can name it. A browser bookmark cannot.
+            onRequestCode = { client.requestOtp(store.uniqueIdOrNull()) },
             onSubmit = { code ->
                 adminError = null
                 when (action) {

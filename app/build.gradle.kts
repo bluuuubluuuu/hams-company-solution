@@ -35,8 +35,15 @@ android {
         applicationId = "com.klk.hams"
         minSdk = 33
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // versionCode MUST increase on every build you distribute. Android refuses
+        // to install an APK whose versionCode is lower than the one already on the
+        // device, and MDM/update flows use it to detect that an update exists.
+        // Bump it even for a hotfix; never reuse a number that has left this machine.
+        //
+        // versionName is the human-readable label. It is what each handset reports
+        // to the registry via check_binding, and what shows in the admin unit list.
+        versionCode = 5
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -50,6 +57,33 @@ android {
         buildConfigField("String", "MANUAL_CLAIM_URL", javaStringLiteral(prop("MANUAL_CLAIM_URL")))
         buildConfigField("String", "RELEASE_URL",      javaStringLiteral(prop("RELEASE_URL")))
         buildConfigField("String", "VERIFY_URL",       javaStringLiteral(prop("VERIFY_URL")))
+        // Office OTP request endpoint. The app GETs this to ask the backend to
+        // issue a supervisor code and mail it to the admin; the code itself never
+        // comes back to the phone. Optional - blank disables the in-app button.
+        buildConfigField("String", "OTP_REQUEST_URL",  javaStringLiteral(prop("OTP_REQUEST_URL")))
+    }
+
+    // Release signing. The keystore itself is NEVER committed - it lives outside
+    // the repo and its paths/passwords come from local.properties (gitignored).
+    //
+    // THIS KEY IS PERMANENT. Android ties the app identity - and the per-app
+    // ANDROID_ID that the provisioning registry uses as device_fingerprint - to
+    // the signing key. Signing a later build with a different key means every
+    // handset must be uninstalled, admin-released and re-paired. Back the
+    // keystore up somewhere that survives this laptop.
+    //
+    // local.properties keys (see local.properties.example):
+    //   RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+    signingConfigs {
+        create("release") {
+            val storePath = prop("RELEASE_STORE_FILE")
+            if (storePath.isNotBlank() && rootProject.file(storePath).exists()) {
+                storeFile = rootProject.file(storePath)
+                storePassword = prop("RELEASE_STORE_PASSWORD")
+                keyAlias = prop("RELEASE_KEY_ALIAS")
+                keyPassword = prop("RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -59,6 +93,13 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            // Only attach the signing config once a keystore is actually configured,
+            // so a checkout without local.properties still builds (unsigned) instead
+            // of failing. assembleRelease WITHOUT this produces an APK Android will
+            // refuse to install - check the log line below before distributing.
+            signingConfig = signingConfigs.getByName("release").takeIf {
+                it.storeFile?.exists() == true
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -76,6 +117,25 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+// Warn rather than silently shipping an unsigned APK. Checks the file actually
+// EXISTS, not merely that the property is set - a typo'd or stale path would
+// otherwise fall through to an unsigned build with no warning at all.
+run {
+    val storePath = prop("RELEASE_STORE_FILE")
+    val reason = when {
+        storePath.isBlank() -> "RELEASE_STORE_FILE not set in local.properties"
+        !rootProject.file(storePath).exists() ->
+            "keystore not found at '$storePath' (resolved to ${rootProject.file(storePath).absolutePath})"
+        else -> null
+    }
+    if (reason != null) {
+        logger.lifecycle(
+            "HAMS: $reason - :app:assembleRelease will produce an UNSIGNED APK " +
+                "that Android will refuse to install."
+        )
     }
 }
 

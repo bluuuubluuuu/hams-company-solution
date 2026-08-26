@@ -10,6 +10,31 @@ object AppConfig {
     const val MANUAL_CLAIM_URL: String = BuildConfig.MANUAL_CLAIM_URL
     const val RELEASE_URL: String = BuildConfig.RELEASE_URL
     const val VERIFY_URL: String = BuildConfig.VERIFY_URL
+    // Office OTP request endpoint. GET-only; the backend issues a supervisor code
+    // and mails it to the admin - the code never comes back to the phone. Blank
+    // hides the in-app "Request code" button, so the app still works without it.
+    const val OTP_REQUEST_URL: String = BuildConfig.OTP_REQUEST_URL
+    // Reported to the registry on every binding re-check so the office can see
+    // which build each handset is running. Format "<versionName> (<versionCode>)",
+    // e.g. "1.1 (2)" - the convention Android tooling uses. versionCode is
+    // included because it is what Android uses to order updates; a versionName
+    // can be reused or forgotten, so the name alone cannot prove two handsets
+    // are on the same build. Both come from build.gradle.kts.
+    const val APP_VERSION: String = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+
+    // -----------------------------------------------------------------------
+    // Version footer shown at the bottom of the count screen.
+    //
+    // EDIT HERE. This constant is the only thing that controls that line; no
+    // other file needs touching. VERSION_NAME comes from build.gradle.kts, so a
+    // version bump updates the footer on its own.
+    // Set this to "" to hide the footer entirely.
+    //
+    // Deliberately the name only. versionCode is the registry's business - it
+    // still travels in APP_VERSION above - and means nothing to whoever is
+    // reading this line off a handset.
+    // -----------------------------------------------------------------------
+    const val UI_VERSION_FOOTER: String = "HAMS ${BuildConfig.VERSION_NAME}"
     /** Periodic binding re-check cadence. WorkManager floor is 15 min. */
     const val BINDING_CHECK_INTERVAL_MINUTES: Long = 15
 
@@ -55,19 +80,9 @@ object AppConfig {
     const val EVENT_CODE_BATTERY_CRITICAL: Int = 292    // local-only edge marker
     const val EVENT_CODE_GPS_DEGRADED: Int = 293        // local-only diagnostic marker
 
-    // Legacy dev counting codes from the pre-v1.2 design. Retained here only so
-    // any historical reference in code/tests still compiles; they are NOT
-    // outbound-approved and are NOT used by recordPlus/recordMinus anymore.
-    @Deprecated(
-        "v1.2 outbound policy uses 179/180 directly. 279/280 are not outbound-approved.",
-        ReplaceWith("EVENT_CODE_PLUS")
-    )
-    const val EVENT_CODE_PLUS_DEV: Int = 279
-    @Deprecated(
-        "v1.2 outbound policy uses 179/180 directly. 279/280 are not outbound-approved.",
-        ReplaceWith("EVENT_CODE_MINUS")
-    )
-    const val EVENT_CODE_MINUS_DEV: Int = 280
+    // (279/280 - the pre-v1.2 dev counting codes - were removed 2026-08-05. They
+    // had no remaining references. Counting uses 179/180 directly; see
+    // docs/HAMS_EVENT_CODE_DICTIONARY.md for why 279/280 are not outbound-approved.)
 
     const val HEARTBEAT_INTERVAL_MINUTES: Int = 1
     const val BATTERY_WARN_THRESHOLD_PCT: Int = 20
@@ -76,6 +91,36 @@ object AppConfig {
 
     const val PUSH_NEW_TASK_TO_WIALON: Boolean = false
     const val PUSH_MINUS_ONLY_IF_PRODUCTIVE: Boolean = true
+
+    // Count-integrity set (2026-08-19). Wialon stores ONE message per unit per
+    // second - IPS timestamps are whole seconds - so two presses sharing a second
+    // used to arrive as one stored message. Reports that count messages were
+    // reading ~61% of the presses the handsets actually recorded.
+    //
+    // Hold-to-repeat matches the press rate limit below: a held button must not
+    // generate presses the limiter would only reject. 200 ms also meant an
+    // accidental two-second hold registered ten cuts.
+    const val PRESS_REPEAT_DELAY_MS: Long = 400
+    const val PRESS_REPEAT_INTERVAL_MS: Long = 1_500
+
+    // Minimum gap between two recorded presses of the SAME button.
+    //
+    // This is a deliberate rate limit, not a debounce. Wialon stores every
+    // message we send - same-second messages included, verified 2026-08-19 - but
+    // the notification layer that feeds the count report fires at most once per
+    // second, so presses sharing a second were reported as one. Holding presses
+    // at least this far apart gives each its own second, so each triggers.
+    //
+    // It costs real counts when someone taps faster than this, which is why a
+    // rejected press is announced (PressFeedback.Refused) rather than dropped
+    // silently - the worker must hear that it did not count.
+    const val PRESS_MIN_INTERVAL_MS: Long = 1_500
+
+    // When presses share a second, later ones are stored one second apart so each
+    // gets its own slot on the wire. Real time catches up as soon as pressing
+    // slows. The cap stops a pathological burst from stamping events far into the
+    // future: past it, collision is preferred over a wrong time.
+    const val WIRE_TIMESTAMP_MAX_DRIFT_SEC: Long = 300
 
     // Continuous GPS stream (Task 2.7.5, revised after field validation 2026-05-06).
     // While a task is active the stream uses PRIORITY_HIGH_ACCURACY at 1 s interval —
@@ -108,6 +153,9 @@ object AppConfig {
 
     // Manual push session config (Task 2.8 spec).
     const val PUSH_MANUAL_TIMEOUT_MS: Long = 30L * 60_000L
+
+    /** Ceiling on the synchronous cut-delivery step at OTP release. */
+    const val DELIVER_BUDGET_MS: Long = 15_000L
 
     /**
      * Whether cut-data push may run on ANY connection (mobile data, tethering,

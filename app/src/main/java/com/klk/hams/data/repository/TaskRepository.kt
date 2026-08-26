@@ -9,6 +9,7 @@ import com.klk.hams.data.model.Task
 import com.klk.hams.push.PushEligibility
 import com.klk.hams.push.TelemetryRepository
 import com.klk.hams.time.Clock
+import com.klk.hams.time.WireTimestamps
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.LocalDate
@@ -27,12 +28,36 @@ class TaskRepository(
     @Volatile
     var onTaskFinalized: (() -> Unit)? = null
 
+    // Last wire-second handed out to a +/- event. Held in memory rather than read
+    // back from SQLite: `timestamp` is an ISO string whose fractional part is
+    // variable-width, so MAX()/ORDER BY on it is not reliably chronological. The
+    // only cost of losing it on a process restart is one possible collision, if a
+    // press happens in the very same second the app came back.
+    private val lastWireSecond = java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE)
+
+    /**
+     * Wire timestamp for a press: [nowIso] unless another press already claimed
+     * that second, in which case the next free one. Second resolution, matching
+     * what the IPS frame can express.
+     */
+    private fun wireTimestamp(nowIso: String): String {
+        val nowSecond = Instant.parse(nowIso).epochSecond
+        val second = lastWireSecond.updateAndGet { last ->
+            WireTimestamps.nextSecond(nowSecond, last, AppConfig.WIRE_TIMESTAMP_MAX_DRIFT_SEC)
+        }
+        return Instant.ofEpochSecond(second).toString()
+    }
+
     /**
      * Device/behaviour telemetry row. Pushed via the diagnostics telemetry drain.
      *
      * [timestampIso] overrides the event time only (not `created_at`): used to
      * backfill a missed shutdown dated at the last-seen instant while keeping the
      * row's creation time fresh so the retention sweep does not purge it early.
+     *
+     * [lostTasks] / [lostCuts] are null for every diagnostic except the release
+     * markers (302 work_stranded, 304 device_unbound, 2026-07-23) — only those
+     * carry a leftover figure, and the frame builder omits the params when null.
      */
     suspend fun recordDiagnostic(
         type: com.klk.hams.diagnostics.DiagnosticType,
@@ -40,6 +65,8 @@ class TaskRepository(
         snapshot: LocationSnapshot? = null,
         timestampIso: String? = null,
         pushed: Int = 0,
+        lostTasks: Int? = null,
+        lostCuts: Int? = null,
     ): Long {
         val now = clock.nowUtcIso()
         return diagnosticDao.insert(
@@ -54,6 +81,8 @@ class TaskRepository(
                 hdop = snapshot?.hdop,
                 satellites = snapshot?.satellites,
                 speedKmh = snapshot?.speedKmh,
+                lostTasks = lostTasks,
+                lostCuts = lostCuts,
             )
         )
     }
@@ -121,7 +150,7 @@ class TaskRepository(
                 taskId = taskId,
                 eventType = "plus",
                 eventCode = AppConfig.EVENT_CODE_PLUS,
-                timestamp = now,
+                timestamp = wireTimestamp(now),
                 latDecimal = location.latDecimal,
                 lonDecimal = location.lonDecimal,
                 hdop = location.hdop,
@@ -157,7 +186,7 @@ class TaskRepository(
                 taskId = task.id,
                 eventType = "minus",
                 eventCode = AppConfig.EVENT_CODE_MINUS,
-                timestamp = now,
+                timestamp = wireTimestamp(now),
                 latDecimal = location.latDecimal,
                 lonDecimal = location.lonDecimal,
                 hdop = location.hdop,
@@ -449,9 +478,68 @@ class TaskRepository(
     suspend fun diagnosticPushedState(id: Long): Int? =
         diagnosticDao.pushedState(id)
 
+    /** Leftover accounting at release time (302 work_stranded, 2026-07-23). */
+    data class UnsentWork(val tasks: Int, val cuts: Int)
+
+    /**
+     * What this device would fail to deliver if it unbound right now.
+     *
+     * Both figures are counted over `events`, not `tasks`, so already-stranded
+     * work (`pushed = 2`) is never re-reported on a later release. `cuts` counts
+     * `event_code = 179` only — that is the harvest figure a report would have
+     * produced, and matching it keeps the loss metric and the harvest metric on
+     * the same arithmetic.
+     */
+    suspend fun countUnsentWork(): UnsentWork = UnsentWork(
+        tasks = eventDao.countUnsentTasks(),
+        cuts = eventDao.countUnsentCuts(),
+    )
+
+    /** Unpushed telemetry ids, snapshotted before a release drain. */
+    suspend fun pendingTelemetryIds(): List<Long> = diagnosticDao.pendingIds()
+
+    /**
+     * Permanently rejects every still-pending event row and drives
+     * `push_status = 'pending'` tasks to their terminal state. These are two
+     * different row sets: `eventDao.strandAllPending()` is global (`WHERE
+     * pushed = 0`), so it also strands the rows of a still-`active` task,
+     * while `taskDao.pendingTasks()` only advances tasks already in
+     * `'pending'`. Called at release **unconditionally**, whether or not the
+     * 302/304 marker reached the gateway — a row left `pushed = 0` would
+     * upload under the next unit this phone binds to, and misfiling harvest
+     * onto the wrong worker is worse than losing it.
+     *
+     * **Precondition: callers MUST finalize the active task before calling
+     * this.** If an active task's rows are still `pushed = 0` when this
+     * runs, they are stranded (`pushed = 2`) but that task's `push_status`
+     * is left `'active'` — it is not driven terminal here, and the returned
+     * count still includes its rows. It resolves on the next push run, when
+     * `PushWorker`'s terminal-state sweep drives it to `'failed'`.
+     *
+     * Rows are marked `pushed = 2`, not deleted. They survive in SQLite for
+     * `AppConfig.SQLITE_RETENTION_DAYS` and are recoverable by a DB pull.
+     *
+     * Returns the number of event rows stranded.
+     */
+    suspend fun strandUnsentWork(): Int = db.withTransaction {
+        val affected = taskDao.pendingTasks().map { it.id }
+        val stranded = eventDao.strandAllPending()
+        for (taskId in affected) markTaskTerminalState(taskId)
+        stranded
+    }
+
+    suspend fun pendingCutIds(): List<Long> = eventDao.pendingCutIds()
+
+    suspend fun lostAmong(snapshotIds: List<Long>): UnsentWork = UnsentWork(
+        tasks = eventDao.countTasksNotUploadedAmong(snapshotIds),
+        cuts = eventDao.countNotUploadedAmong(snapshotIds),
+    )
+
     /** Marks an event as successfully uploaded. */
     suspend fun markEventUploaded(eventId: Long) {
-        eventDao.markPushed(listOf(eventId), 1)
+        // Guarded: a row stranded by the release path (pushed = 2) must not
+        // be flipped back by a late worker acknowledgement.
+        eventDao.markUploadedIfPending(eventId)
     }
 
     /**
@@ -523,27 +611,11 @@ class TaskRepository(
         return diagnosticDao.deleteOlderThan(cutoff)
     }
 
-    /**
-     * First step of the Wi-Fi push flow: if an active task has count > 0,
-     * finalise it as "auto_wifi". Writes a local-only 284 audit row (never
-     * pushed under dictionary v1.2) and flips the task's push_status to
-     * "pending" so the engine can drain its outbound rows.
-     *
-     * Returns the saved task's id when something was saved, null on no-op
-     * (no active task or zero count). The push engine never receives an
-     * outbound event from this call — it triggers on `getPending()`.
-     */
-    @Deprecated(
-        "Task 2.8 spec: push and task lifecycle are independent. Push only operates on " +
-            "tasks already in push_status='pending'. Active-task finalization happens via " +
-            "manual save (NEW TASK 5s), app swipe (auto_killed), or day rollover (auto_rollover). " +
-            "Do not call from new code.",
-        level = DeprecationLevel.WARNING
-    )
-    suspend fun autoSaveActiveOnWifi(
-        batteryPct: Double,
-        location: LocationSnapshot?
-    ): Long? = saveActiveTask("auto_wifi", location, batteryPct)
+    // (autoSaveActiveOnWifi - the legacy "finalise the active task before pushing"
+    //  hook - was removed 2026-08-05 with no remaining callers. Under the Task 2.8
+    //  spec push and task lifecycle are independent: push drains only tasks already
+    //  in push_status='pending', and active-task finalisation happens via NEW TASK,
+    //  app swipe (auto_killed) or day rollover (auto_rollover).)
 
     private suspend fun getNextTaskSeqInternal(utcIsoTimestamp: String): Int {
         val zone = ZoneId.of("Asia/Kuala_Lumpur")

@@ -57,4 +57,53 @@ interface EventDao {
         "AND NOT (event_code = 180 AND work_count <= 0)"
     )
     suspend fun countRejectedForTask(taskId: Long): Int
+
+    // --- Release-time leftover accounting (302 work_stranded, 2026-07-23) ---
+
+    // Tasks that still hold unsent rows. Counted over `events`, not `tasks`, so
+    // already-stranded work (pushed = 2) is never re-reported on a later release.
+    @Query("SELECT COUNT(DISTINCT task_id) FROM events WHERE pushed = 0")
+    suspend fun countUnsentTasks(): Int
+
+    // The harvest figure: 179 only. Counting the full pushable set would let
+    // heartbeats dominate (a phone with 6 cuts and 400 beacons would report 406).
+    @Query("SELECT COUNT(*) FROM events WHERE pushed = 0 AND event_code = 179")
+    suspend fun countUnsentCuts(): Int
+
+    // Marks every still-pending row permanently rejected. Applied at release
+    // unconditionally, whether or not the 302/304 marker reached the gateway.
+    // Covers 180 and 35 as well as 179 — they belong to the departing unit too.
+    // Code-agnostic (WHERE pushed = 0), unlike countRejectedForTask's event_code
+    // filter above. Safe today only because PushEligibility.shouldQueueForPush
+    // keeps pushed = 0 a subset of getPending's allow-list (179/180/35) — if that
+    // invariant ever breaks, a stranded task could read back as 'uploaded'.
+    @Query("UPDATE events SET pushed = 2 WHERE pushed = 0")
+    suspend fun strandAllPending(): Int
+
+    // --- Deliver-before-strand snapshot accounting (Approach A, 2026-07-23) ---
+
+    // The harvest snapshot taken BEFORE the release deliver step. Ordered like
+    // getPending so a partial deliver drains oldest-first.
+    @Query("SELECT id FROM events WHERE pushed = 0 AND event_code = 179 ORDER BY timestamp ASC, id ASC")
+    suspend fun pendingCutIds(): List<Long>
+
+    // Of the snapshot, how many did NOT reach Wialon (pushed != 1). Counts both
+    // still-queued (0) and rejected (2), so a PushEngine rejection can't hide as
+    // a clean 304. This is lost_cuts.
+    @Query("SELECT COUNT(*) FROM events WHERE id IN (:ids) AND pushed != 1")
+    suspend fun countNotUploadedAmong(ids: List<Long>): Int
+
+    // Distinct tasks among the not-uploaded snapshot ids - for the operator sheet
+    // ("N tasks / M cuts discarded"). Never goes on the wire.
+    @Query("SELECT COUNT(DISTINCT task_id) FROM events WHERE id IN (:ids) AND pushed != 1")
+    suspend fun countTasksNotUploadedAmong(ids: List<Long>): Int
+
+    // Guarded uploaded-mark (review finding P1a). Only 0 -> 1 is a valid ack
+    // transition. Without the `pushed = 0` guard, a PushWorker running
+    // concurrently with the release path could flip a just-stranded row
+    // (pushed = 2) back to 1 after the 302 already reported it lost, leaving
+    // inconsistent state. This makes the strand-vs-worker interleaving benign:
+    // once stranded, a row stays stranded.
+    @Query("UPDATE events SET pushed = 1 WHERE id = :id AND pushed = 0")
+    suspend fun markUploadedIfPending(id: Long)
 }
