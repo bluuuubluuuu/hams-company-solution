@@ -1,4 +1,4 @@
-<!-- DRAFT — pending review by the SV documentation account. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # HAMS Production Documentation
 
 Use this folder for live operating, debugging, and scaling information.

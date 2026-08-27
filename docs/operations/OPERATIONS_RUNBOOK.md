@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Operations Runbook
 
 **Purpose:** Triage production problems without exposing credentials or changing data ownership accidentally.

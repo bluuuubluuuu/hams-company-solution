@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # HAMS Event-code Dictionary
 
 This reference maps the current Android source to its local and Wialon IPS event codes. It is not evidence of live Wialon reports, notifications, or server-side configuration.

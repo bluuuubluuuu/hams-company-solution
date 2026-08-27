@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Configuration Reference
 
 **Purpose:** Identify configuration keys, their owner, and where real values belong. This document never contains a real secret.

@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Device Pairing, Release, and Replacement
 
 This checklist describes the behaviour implemented by the Android app. It does not define the company’s live Wialon unit settings, n8n deployment, database procedures, or support roles; those must be confirmed by the company platform administrator.

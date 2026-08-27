@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Functional Requirements — HAMS Android App
 
 **Purpose:** Define the current production behaviour required from the HAMS Android application.

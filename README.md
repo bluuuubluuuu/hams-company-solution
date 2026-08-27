@@ -1,4 +1,4 @@
-<!-- DRAFT — production-documentation review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # HAMS Task Recorder
 
 Production reference for the HAMS Android field-counting application and its company-managed Wialon, n8n, and PostgreSQL integrations.
