@@ -5,7 +5,7 @@ These seven JSON files are sanitized recovery/reference exports for the company-
 
 Real credentials are intentionally absent. The company n8n server remains the operational source of truth; export an updated sanitized snapshot after an approved production workflow change.
 
-## Device OTP — seeding on code request (20 August 2026)
+## `G_PM_IT_IOT_HAMS_DEVICEOTP` — seeding on code request (20 August 2026)
 
 `G_PM_IT_IOT_HAMS_DEVICEOTP.json` is a sanitized export of the workflow **as
 deployed**, replacing the earlier browser-form version that only issued a code.
