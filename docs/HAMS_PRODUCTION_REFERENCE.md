@@ -198,15 +198,15 @@ Ordering caveat: Wialon cannot order messages that share a timestamp — the 19 
 
 The company n8n server is the operational source of truth; repository workflow JSON files are sanitized recovery/reference snapshots.
 
-| n8n workflow | Role |
+| n8n workflow (name in n8n) | Role |
 |---|---|
-| Seed | Create/refresh unit registry records in bulk. Manual trigger. |
-| Device OTP | Seed the requested unit if the registry has never seen it, then issue and email an office OTP. |
-| Manual Claim | Pair a phone to a unit. |
-| Verify | Check current phone-to-unit ownership. |
-| Release | Release verified owner binding. |
-| Admin Release | Office force-release for lost/reassigned phone. |
-| List Units | Read-only registry view. |
+| `G_PM_IT_IOT_HAMS_SEED` | Create/refresh unit registry records in bulk. Manual trigger. |
+| `G_PM_IT_IOT_HAMS_DEVICEOTP` | Seed the requested unit if the registry has never seen it, then issue and email an office OTP. |
+| `G_PM_IT_IOT_HAMS_MANUALCLAIM` | Pair a phone to a unit. |
+| `G_PM_IT_IOT_HAMS_VERIFY` | Check current phone-to-unit ownership. |
+| `G_PM_IT_IOT_HAMS_RELEASE` | Release verified owner binding. |
+| `G_PM_IT_IOT_HAMS_ADMINRELEASE` | Office force-release for lost/reassigned phone. |
+| `G_PM_IT_IOT_HAMS_LISTUNITS` | Read-only registry view. |
 
 | PostgreSQL item | Purpose |
 |---|---|
