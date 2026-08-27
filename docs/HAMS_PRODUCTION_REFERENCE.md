@@ -316,16 +316,16 @@ This database supports unit provisioning, OTP control, binding verification, and
 
 ### D.3 Routines
 
-| Routine | Purpose |
-|---|---|
-| `seed_unit` | Insert a unit or refresh its label without changing a live binding. |
-| `issue_otp` | Purge expired OTPs and issue a six-digit OTP. |
-| `otp_is_valid` | Check OTP validity without consuming it. |
-| `consume_otp` | Atomically consume a valid OTP. |
-| `manual_claim` | Bind a phone to a unit after ownership, OTP, and drain checks. |
-| `release_unit` | Release a unit only for its proven owner. |
-| `check_binding` | Return binding state and refresh owner activity/version when bound. |
-| `admin_release` | Office force-release for lost, dead, or reassigned handset. |
+| Routine | Parameters | Purpose |
+|---|---|---|
+| `seed_unit` | `p_unique_id`, `p_name` | Insert a unit or refresh its label without changing a live binding. |
+| `issue_otp` | `p_ttl_minutes` (default 10) | Purge expired OTPs and issue a six-digit OTP. |
+| `otp_is_valid` | `p_otp` | Check OTP validity without consuming it. |
+| `consume_otp` | `p_otp` | Atomically consume a valid OTP. |
+| `manual_claim` | `p_unique_id`, `p_fingerprint`, `p_otp` | Bind a phone to a unit after ownership, OTP, and drain checks. |
+| `release_unit` | `p_unique_id`, `p_fingerprint`, `p_otp` | Release a unit only for its proven owner. |
+| `check_binding` | `p_unique_id`, `p_fingerprint`, `p_app_version` (default NULL) | Return binding state and refresh owner activity/version when bound. |
+| `admin_release` | `p_unique_id` | Office force-release for lost, dead, or reassigned handset. Takes no fingerprint: the point is that the owning phone can no longer prove anything. |
 
 ### D.4 App-facing status values
 
