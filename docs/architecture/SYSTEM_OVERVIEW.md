@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # System Overview
 
 **Purpose:** Explain the live HAMS components, their ownership boundaries, and where to begin a production investigation.

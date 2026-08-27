@@ -31,6 +31,9 @@ proguard/
 .idea/
 *.iml
 
+# ==== Office lock files (Word/WPS write these while a document is open) ====
+~$*
+
 # ==== OS ====
 .DS_Store
 Thumbs.db

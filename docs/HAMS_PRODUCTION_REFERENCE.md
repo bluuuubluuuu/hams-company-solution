@@ -1,4 +1,4 @@
-<!-- DRAFT — concise production report. Confirm company-owned operational details before publication. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # HAMS Task Recorder
 ## Production Reference and User Guide
 
@@ -6,9 +6,9 @@
 |---|---|
 | Prepared by | Woo Ying Hui (`it.intern4@klk.com.my`) |
 | Project PIC | Leong Kah Choon (`kc.leong@klk.com.my`) |
-| Date | 20 August 2026 |
+| Date | 26 August 2026 |
 | Copyright | © 2026 Kuala Lumpur Kepong Berhad. All rights reserved. |
-| Status | Draft |
+| Status | Released |
 | Approved handset | realme C85 |
 | App version | 1.2 (3) in production; 1.3 (5) under trial |
 | Android support | Android 13 (API 33) to Android 15 (API 35) |

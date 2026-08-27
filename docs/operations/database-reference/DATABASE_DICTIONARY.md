@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # HAMS Database Dictionary
 
 **Purpose:** Complete metadata reference for the company-managed PostgreSQL provisioning database. It supports device pairing, binding verification, release, and office administration. It is not the field cut-data path: Android records cuts locally and sends them directly to Wialon.

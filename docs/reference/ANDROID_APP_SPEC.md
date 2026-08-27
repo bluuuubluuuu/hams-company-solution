@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Android Application Specification
 
 This is a code-derived specification of the Android application as it exists in this repository. It does not assert live Wialon, n8n, PostgreSQL, or handset facts that cannot be established from source.

@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # Data Flow
 
 **Purpose:** Show which system owns each production flow so investigations start in the correct place.

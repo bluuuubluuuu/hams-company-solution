@@ -1,4 +1,4 @@
-<!-- DRAFT — production-content review required. -->
+<!-- Production release — 2026-08-26. Reflects app 1.2 (production) and 1.3 (trial). -->
 # n8n Workflow Snapshots
 
 These seven JSON files are sanitized recovery/reference exports for the company-managed n8n workflows. They are not a local deployment guide and must not be imported over a live workflow without an approved change, backup, and rollback plan.
