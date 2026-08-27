@@ -2,7 +2,6 @@
 local.properties
 credentials.env
 *.env
-!credentials.env.example
 *.keystore
 *.jks
 
