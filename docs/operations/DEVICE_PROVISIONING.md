@@ -17,7 +17,7 @@ Before pairing a handset, the office administrator needs:
 
 A unit must exist in the registry before it can be claimed; `manual_claim` answers `not_owner_or_not_found` otherwise.
 
-Since 20 August 2026 this is automatic. When a handset requests a supervisor code, it sends the unit id it is about to pair with, and the Device OTP workflow seeds that unit before issuing the code:
+Since 20 August 2026 this is automatic. When a handset requests a supervisor code, it sends the unit id it is about to pair with, and `G_PM_IT_IOT_HAMS_DEVICEOTP` seeds that unit before issuing the code:
 
 1. The unit id is checked against `^OC\d{3}_H_[A-Za-z0-9]+$`. A missing or malformed id skips seeding; the OTP is still issued.
 2. The registry is checked first. A unit already present skips Wialon entirely.
@@ -26,7 +26,7 @@ Since 20 August 2026 this is automatic. When a handset requests a supervisor cod
 
 Seeding is best-effort by design: if Wialon is unreachable the OTP is still issued, and the failure appears **only** in the n8n execution log. A unit that is licensed in Wialon but absent from the registry after a code request means seeding failed — check that execution before assuming the unit id is wrong.
 
-Manual seeding remains available through the Seed workflow’s manual trigger, and is still the route for bulk onboarding or for a unit nobody has requested a code for.
+Manual seeding remains available through the manual trigger on `G_PM_IT_IOT_HAMS_SEED`, and is still the route for bulk onboarding or for a unit nobody has requested a code for.
 
 The current source supports Android API 33–35 and uses `Settings.Secure.ANDROID_ID` as the device fingerprint. Do not move a production signing key or rebuild a release under a different signing identity without planning re-pairing.
 
