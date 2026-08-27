@@ -29,6 +29,8 @@
 | FR-06 | 🔴 Must | Scaled presses must create one event per count change while sharing the captured GPS, timestamp, and battery snapshot. |
 | FR-07 | 🔴 Must | A new task must require a three-second hold and must preserve the prior task for later delivery. |
 | FR-08 | 🔴 Must | Events and task state must be saved locally before network delivery is attempted. |
+| FR-17 | 🔴 Must | Every press outcome must be announced audibly and haptically **after** the record is written — a distinct cue for a recorded `+`, a recorded `−`, and a refused press — so a worker who is not watching the screen can tell a counted press from a refused one. (From 1.2.) |
+| FR-18 | 🟠 Should | Recorded presses of the same button should be held at least `PRESS_MIN_INTERVAL_MS` apart so each occupies its own wire second, and a press refused by that limit must be announced rather than dropped silently. (1.3, trial build only; the two buttons are tracked separately.) |
 
 ## Delivery and Wialon integration
 

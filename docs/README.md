@@ -14,6 +14,8 @@ Historical development records belong outside this production document set.
 | Architecture | [SYSTEM_OVERVIEW.md](architecture/SYSTEM_OVERVIEW.md) | Current production components and ownership. |
 | Architecture | [DATA_FLOW.md](architecture/DATA_FLOW.md) | App-to-Wialon-to-backend data flow. |
 | Main guide | [HAMS_PRODUCTION_REFERENCE.md](HAMS_PRODUCTION_REFERENCE.md) | Editable single production reference, user guide, backend overview, and credentials-governance template. |
+| Main guide | `HAMS_PRODUCTION_REFERENCE.docx` | The formal, circulated version of the same reference: cover page, contents, and screenshots. Keep it in step with the markdown; patch it in place rather than regenerating. |
+| Releases | `../releases/` | One record per distributed build (`hams-<version>.md`) giving its SHA-256, signer fingerprint, and what changed. The `.apk` files themselves are not in Git. |
 | Reference | [CONFIGURATION_REFERENCE.md](reference/CONFIGURATION_REFERENCE.md) | Configuration keys, ownership, and secret-storage rules. |
 | Reference | [ANDROID_APP_SPEC.md](reference/ANDROID_APP_SPEC.md) | Code-derived Android behaviour, limits, data storage, and delivery. |
 | Reference | [FR_APP_REQUIREMENTS.md](reference/requirements/FR_APP_REQUIREMENTS.md) | Functional requirements with MoSCoW alerts. |

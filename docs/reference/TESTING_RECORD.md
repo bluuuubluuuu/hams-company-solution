@@ -52,7 +52,7 @@ Both builds were rebuilt to carry the authorship record and the count-screen ver
 **Not verified on a handset:**
 
 - **The footer's final wording has never been seen on a screen.** An earlier build showing `HAMS 1.3 (5)` was confirmed visually; the shipped name-only form (`HAMS 1.2` / `HAMS 1.3`) was installed but not observed.
-- **1.2 has not run on any device.** Every attempt was blocked by the Android downgrade rule, since the only available handset already held versionCode 5. 1.2 is verified as a file only — its footer, layout, and behaviour are unproven on hardware. This matters most of the three gaps here, because 1.2 is the build intended for twelve handsets.
+- **1.2 ran on a handset on 21 August**, sideloaded onto a HONOR ALI-NX1 (Android 15). `versionCode 3`, `versionName 1.2` and the fleet signer fingerprint were read back off the device, and the app launched. Two limits on that evidence: the handset is not the approved realme C85, so nothing about timing or layout there predicts production; and the device was disconnected before the installed APK could be hashed, so **which of the two 1.2 builds it received is unconfirmed**. Earlier attempts on the spare realme were blocked by the Android downgrade rule, that handset already holding versionCode 5.
 - **Layout at other screen sizes.** The footer takes no fixed height and the surrounding column absorbs the change through `ActionRow`'s weight, but this was only ever exercised at 720x1570 / density 320.
 
 ## Known verification gap

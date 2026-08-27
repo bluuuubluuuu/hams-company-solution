@@ -17,7 +17,7 @@
 | ID | Priority | Requirement |
 |---|---|---|
 | NFR-01 | 🔴 Must | The app must support Android API 33 and later; the current target is API 35. |
-| NFR-02 | 🔴 Must | Counting controls must clearly indicate when GPS is unavailable so a worker cannot unknowingly record invalid work. |
+| NFR-02 | 🔴 Must | A worker must never be able to record work unknowingly while GPS is unavailable. From 1.2 the controls stay pressable and the refusal is announced by cue, rather than the buttons being disabled — a disabled button produced no count and no feedback, which field users reported as the phone not responding. GPS gating itself is unchanged. |
 | NFR-03 | 🟠 Should | Delivery progress and final outcome should be understandable without developer tools. |
 
 ## Reliability and data integrity
@@ -42,7 +42,7 @@
 | ID | Priority | Requirement |
 |---|---|---|
 | NFR-11 | 🟠 Should | Delivery must batch and retry work without blocking routine field counting. |
-| NFR-12 | 🟠 Should | The app should expose enough logs, local task state, app version, and binding outcome to support company IT diagnosis. |
+| NFR-12 | 🟠 Should | The app should expose enough logs, local task state, app version, and binding outcome to support company IT diagnosis. The build name is shown at the bottom of the count screen so it can be read out over the phone without a cable or admin access. |
 | NFR-13 | 🟠 Should | New devices must be scalable through repeatable unit provisioning, not reuse of an existing unit identity. |
 | NFR-14 | 🟢 Could | Company tooling could surface fleet-level health, stranded-work counts, and version compliance. |
 | NFR-15 | ⚪ Won't | The app will not recreate or operate company n8n/PostgreSQL infrastructure from a developer workstation. |
